@@ -1,0 +1,385 @@
+#!/bin/bash
+#
+# using the very nice "Markup.pl" from
+# http://daringfireball.net/projects/markdown/syntax
+#
+# You need to configure block in ~/.block/config.
+# An example ~/.block/config looks like this:
+#
+#   # Where does my block data live?
+#   block_home=~/doc/block
+#
+#   # Where should I rsync the produced html and atom feed to?
+#   block_dst=www.example.org:html/
+#
+#   # What's the URL of the resulting blog?
+#   block_url=http://www.example.org/my_blog
+#
+# TODO: make it validate with http://validator.w3.org/
+#
+# (c) licensed under the GPLv2 license by Tomáš Pospíšek
+#
+
+usage() {
+  echo 'usage:'
+  echo '   article new                     - Write a new article'
+  echo '   article to html <article>       - Output article in html form'
+  echo '                                     to stdout.'
+  echo '   article to atom <article.html>  - Output html in atom form'
+  echo '                                     to stdout.'
+  echo '   block                           - Edit new article and generate'
+  echo '                                     blog and preview.'
+  echo "   block home                      - Show block's home directory"
+  echo '                                     use as: cd "`block home`".'
+  echo '   block publish                   - Publish blog.'
+  echo '   block rebuild                   - Rebuild blog from articles.'
+  echo
+  echo 'configuration:'
+  echo '   ~/.block/config                 - Configuration file. Needs to'
+  echo '                                     set the following variables:'
+  echo '   block_home=/home/joe/block      - Path to block directory'
+  echo '   block_dst=srv.example.org:website/'
+  echo '                                   - Rsync style destination, where'
+  echo '                                     the generated site will be'
+  echo '                                     rsynced to.'
+  echo '   block_url=http://www.example.org/'
+  echo '                                   - Site URL'
+  echo '                                     rsynced to.'
+  echo
+  echo 'directory layout:'
+  echo '   block/input/articles            - your articles'
+  echo '   block/input/bits                - stuff (images etc.) that you can'
+  echo '                                     refer to from youryour articles'
+  echo '   block/input/parts               - parts from which the html pages'
+  echo '                                     and the atom feed will be'
+  echo "                                     assembled. You'll want to edit"
+  echo '                                     these.'
+  echo
+  echo 'project home: https://github.com/tpo/block'
+  echo
+  exit 1
+}
+
+set -e # exit after error
+
+fail() {
+  echo "$1" >&2
+  exit -1
+}
+
+configure_paths() {
+  # init block data paths
+  articles=$block_home/input/articles
+  block_parts=$block_home/input/parts
+  article_signature=$block_parts/signature.html
+  block_html_head=$block_parts/head.html
+  block_html_top=$block_parts/top.html
+  block_html_footer=$block_parts/footer.html
+  block_html_toc_title=$block_parts/toc-title.html
+  block_atom_header=$block_parts/head.xml
+  block_atom_footer=$block_parts/footer.xml
+  block_output=$block_home/output
+  articles_html=$block_output/html
+  articles_atom=$block_output/xml
+  # the following three must reside directly under $block_output
+  # see "rsync" below
+  block_html=$block_output/index.html
+  block_atom=$block_output/index.xml
+  block_bits=$block_output/bits
+  browser=${browser:-firefox}
+}
+
+# number_from_filename filename
+# 
+number_from_filename() {
+  basename "$1" | cut -d' ' -f1
+}
+
+# title_from_filename filename [cutoff_extension]
+# 
+title_from_filename() {
+  basename "$1" "$2"| cut -d' ' -f2-
+}
+
+# build something that can be used as a html anchor and
+# inside a url
+anchor_from_title() {
+  echo "$1" \
+  | iconv -f UTF-8 -t ASCII//TRANSLIT//IGNORE \
+  | tr '[:upper:]' '[:lower:]' \
+  | tr '[:punct:]' '-' \
+  | sed 's/ \{1,\}/-/g;' \
+  | sed 's/-\{1,\}/-/g;'
+  # last two lines: replace multiple spaces, then multiple dashes
+}
+
+url_from_anchor() {
+	echo "$block_url#$1"
+}
+
+# create_html_version_of_article article_path_or_name
+#
+create_html_version_of_article() {
+  (
+    (
+      article_name=$1
+
+      title=`title_from_filename "$article_name"`
+      anchor=`anchor_from_title "$title"`
+
+      echo "<a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>"
+      echo
+      cat "$article_name"
+    ) | markdown
+
+    echo # newlines after each article
+    echo # to make html more readable
+
+  # process $includes
+    # http://www.unix.com.ua/orelly/perl/cookbook/ch07_10.htm
+  ) | perl -n -e \
+           'if( /\$sourcecode(\s*)"(\S*)"/ ) {
+              # replace HTML chars in sourcecode
+              print(`cat '$block_bits/'$2 | sed "s/&/\\&amp;/g ; s/</\\\\&lt;/g ; s/>/\\\\&gt;/g"`);
+              next; }
+            else {
+              print; }'
+}
+
+# see http://feedvalidator.org/docs/error/InvalidRFC3339Date.html
+# fix broken format delivered by `date --rfc3339=seconds` ("date")
+#                         and by `stat --format %z`       ("stat")
+to_rfc3339(){
+  # 1. replace first space with a 'T'   (date and stat)
+  # 2. throw away fractions of a second (stat)
+  # 3. offset is missing a collon       (stat)
+  sed 's/ /T/;
+       s/\.[0-9]* //;
+       s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
+}
+
+# create_atom_version_of_html name_of_article.html
+create_atom_version_of_html() {
+
+  article_html_name=$1
+  updated=$( stat --format %z "$article_html_name" | to_rfc3339 )
+
+  title=`title_from_filename "$article_html_name" ".html"`
+  anchor=`anchor_from_title "$title"`
+  url=`url_from_anchor "$anchor"`
+
+  # see http://www.atompub.org/rfc4287.html
+
+  echo '<entry>'
+    echo "<title>$title</title>"
+    echo "<link href='$url'></link>"
+    echo "<id>$url</id>"
+    echo "<updated>$updated</updated>"
+    echo '<content type="html"><![CDATA['
+      cat "$article_html_name"
+    echo ']]></content>'
+  echo '</entry>'
+}
+
+last_article() {
+  _last_article=`ls "$articles"|sort|tail -n 1`
+  if [ "$_last_article" == "" ]; then
+    echo "00 Phantom initial article"
+  else
+    echo "$_last_article"
+  fi
+}
+
+is_number() {
+  [[ "$1" =~ ^[0-9]+$ ]]
+  return $?
+}
+
+# can exit if article name is broken
+article_num() {
+  num=$( echo "$1" |awk '{ print $1 }' )
+  if is_number "$num"; then
+    echo "$num"
+  else
+    echo "$0: Line $LINENO: article \"$1\" does not have an article number" >&2
+    exit 1
+  fi
+}
+
+create_html_toc() {
+  echo '      <div class="toc">'
+                cat "$block_html_toc_title"
+  echo '        <ul>'
+                  ls $articles_html/* | sort | tac | while read article; do
+                    article_name=`basename "$article" .html`
+                    title=`title_from_filename "$article_name"`
+                    anchor=`anchor_from_title "$title"`
+  echo "          <li><a href="#$anchor">$title</a></li>"
+                  done
+  echo '        </ul>'
+  echo '      </div>'
+}
+
+create_html_block() {
+  (
+    cat $block_html_head
+    echo '    <div class="wrap">'
+    echo '      <div class="content">'
+                  cat $block_html_top
+                  # include in reverse order: most recent first
+                  ls $articles_html/* | sort | tac | while read article; do
+	            # indent text
+                    cat "$article" | sed 's/^/        /'
+                  done
+    echo '      </div>'
+           create_html_toc
+    echo '    </div>'
+    cat $block_html_footer
+  ) > $block_html
+}
+
+create_atom_block() {
+  (
+    cat $block_atom_header
+    updated=$( date --rfc-3339=seconds | to_rfc3339 )
+    echo "  <updated>$updated</updated>"
+    echo
+    for article in $articles_atom/*; do
+      cat "$article"
+    done
+    cat $block_atom_footer
+  ) > $block_atom
+}
+
+# new_article article_name
+# echo $article_name
+#
+new_article() {
+  variable_to_assign_name_to="$1"
+
+  # set article data
+    # determine number the new article
+    last_article_num=$( article_num "`last_article`" )
+    new_article_num=$(( $last_article_num + 1 ))
+    echo -n "Title of new article: "
+    read title
+    article_name="$articles/$new_article_num $title"
+  
+  # edit article
+    vim "$article_name"
+    [ ! -e "$article_name" ] && fail "aborted"
+  # add signature
+    (
+      echo
+      sig=`cat $article_signature`
+      echo "$sig, `date +%F`"
+    ) >> "$article_name"
+  eval "$variable_to_assign_name_to='$article_name'"
+}
+
+article_to_xxml() {
+  article_name="$1"
+  number=`number_from_filename "$article_name"`
+  title=`title_from_filename   "$article_name"`
+  article_html="$articles_html/$number $title.html"
+  article_atom="$articles_atom/$number $title.xml"
+
+  create_html_version_of_article "$article_name" > "$article_html"
+  create_atom_version_of_html    "$article_html" > "$article_atom"
+}
+
+build_blocks() {
+  create_html_block
+  create_atom_block
+}
+
+rebuild() {
+  for article in "$articles"/*; do
+    article_to_xxml "$article"
+  done
+  build_blocks
+}
+
+publish() {
+  ask_for_confirmation -y "publish?" || exit
+  (
+    cd $block_output
+    rsync -avz --copy-unsafe-links `basename $block_html` `basename $block_atom` `basename $block_bits` $block_dst
+  )
+}
+
+build_publish_preview() {
+  build_blocks
+  publish  
+  $browser "$block_url"
+}
+
+missing_fail() {
+  fail "You need to set $1 in the configuration file"
+}
+
+load_config() {
+  source ~/.block/config || fail "Couldn't find config file ~/.block/config"
+  [ -n "$block_home" ]   || missing_fail "block_home"
+  [ -n "$block_dst" ]    || missing_fail "block_dst"
+  [ -n "$block_url" ]    || missing_fail "block_url"
+}
+
+# this script is callable under different names and will
+# then do different things
+#
+main() {
+  load_config
+  configure_paths
+
+  cmd_path=`realpath "$0"`
+  cmd_dir=`dirname $cmd_path`
+  case `basename "$cmd_path"` in
+    article)
+      case "$1" in
+        new)
+          new_article article_name ;;
+        to)
+          case "$2" in
+            html)
+              create_html_version_of_article "$2" ;;
+            atom)
+              create_atom_version_of_html "$2" ;;
+            *)
+              usage ;;
+          esac
+          ;;
+        *)
+          usage ;;
+      esac
+      ;;
+    block)
+      case "$1" in
+        home)
+          echo $block_home
+	  ;;
+        publish)
+          publish
+          ;;
+        rebuild)
+          rebuild
+          ;;
+        "")
+          new_article article_name
+          article_to_xxml "$article_name"
+          build_publish_preview
+          ;;
+        *)
+          usage
+          ;;
+      esac
+      ;;
+    *)
+      usage
+      ;;
+  esac
+}
+
+main "$@" # call main
+
+# vim: expandtab

@@ -1,0 +1,4 @@
+block_home=/home/joe_blogger/block
+block_dst=www.example.org:/var/www/www.example.org/
+block_url=http://www.example.org/
+browser=firefox

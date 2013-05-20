@@ -1,0 +1,2 @@
+This directory contains stuff that will be rsync'ed
+over to the web server, such as images, CSS, etc.
