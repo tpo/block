@@ -52,7 +52,7 @@ now you can write your first article:
 
     ~/.block/config                 # Configuration file. Needs to
                                     # set the following variables:
-    block_home=/home/joe/block      - Path to block directory
+    block_home=/home/joe/block      # Path to block directory
     block_dst=srv.example.org:website/
                                     # Rsync style destination, where
                                     # the generated site will be
