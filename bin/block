@@ -89,16 +89,11 @@ configure_paths() {
   browser=${browser:-firefox}
 }
 
-# number_from_filename filename
+# title_from_article path_to_article
 # 
-number_from_filename() {
-  basename "$1" | cut -d' ' -f1
-}
-
-# title_from_filename filename [cutoff_extension]
-# 
-title_from_filename() {
-  basename "$1" "$2"| cut -d' ' -f2-
+title_from_article() {
+  # title is first line in file in markdown syntax: '## The Title'
+  head -n 1 "$1"| sed 's/^## //'
 }
 
 # build something that can be used as a html anchor and
@@ -117,19 +112,37 @@ url_from_anchor() {
 	echo "$block_url#$1"
 }
 
-# create_html_version_of_article article_path_or_name
+# title_from_html_version_of_article path_to_html_article
+# 
+title_from_html_version_of_article() {
+  # title is first line in file in html syntax:
+  #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+  head -n 1 "$1"| sed 's/^.*<h2>//; s/<\/h2>.*//'
+}
+
+# anchor_from_html_version_of_article filename
+# 
+anchor_from_html_version_of_article() {
+  # title is first line in file in html syntax:
+  #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+  head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
+}
+
+# create_html_version_of_article path_to_article
 #
 create_html_version_of_article() {
   (
     (
-      article_name=$1
+      path_to_article=$1
 
-      title=`title_from_filename "$article_name"`
+      title=`title_from_article "$path_to_article"`
       anchor=`anchor_from_title "$title"`
-
+      # attention: the following line needs to match
+      # in (title|anchor)_from_html_version_of_article
       echo "<a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>"
       echo
-      cat "$article_name"
+      # omit first line, since we've created the title ourselves
+      tail -n +2 "$path_to_article"
     ) | markdown
 
     echo # newlines after each article
@@ -158,14 +171,14 @@ to_rfc3339(){
        s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
 }
 
-# create_atom_version_of_html name_of_article.html
+# create_atom_version_of_html path_to_article.html
 create_atom_version_of_html() {
 
-  article_html_name=$1
-  updated=$( stat --format %z "$article_html_name" | to_rfc3339 )
+  path_to_html_article="$1"
+  updated=$( stat --format %z "$path_to_html_article" | to_rfc3339 )
 
-  title=`title_from_filename "$article_html_name" ".html"`
-  anchor=`anchor_from_title "$title"`
+  title=`title_from_html_version_of_article "$path_to_html_article"`
+  anchor=`anchor_from_html_version_of_article "$path_to_html_article"`
   url=`url_from_anchor "$anchor"`
 
   # see http://www.atompub.org/rfc4287.html
@@ -176,7 +189,7 @@ create_atom_version_of_html() {
     echo "<id>$url</id>"
     echo "<updated>$updated</updated>"
     echo '<content type="html"><![CDATA['
-      cat "$article_html_name"
+      cat "$path_to_html_article"
     echo ']]></content>'
   echo '</entry>'
 }
@@ -211,9 +224,8 @@ create_html_toc() {
                 cat "$block_html_toc_title"
   echo '        <ul>'
                   ls $articles_html/* | sort | tac | while read article; do
-                    article_name=`basename "$article" .html`
-                    title=`title_from_filename "$article_name"`
-                    anchor=`anchor_from_title "$title"`
+                    title=`title_from_html_version_of_article "$article"`
+                    anchor=`anchor_from_html_version_of_article "$article"`
   echo "          <li><a href="#$anchor">$title</a></li>"
                   done
   echo '        </ul>'
@@ -251,11 +263,14 @@ create_atom_block() {
   ) > $block_atom
 }
 
-# new_article article_name
-# echo $article_name
+# new_article variable_to_assign_article_path_to
+#
+# variable_to_assign_article_path_to is the name of
+# a variable to which the article path will be
+# assigned to
 #
 new_article() {
-  variable_to_assign_name_to="$1"
+  variable_to_assign_article_path_to="$1"
 
   # set article data
     # determine number the new article
@@ -263,29 +278,32 @@ new_article() {
     new_article_num=$(( $last_article_num + 1 ))
     echo -n "Title of new article: "
     read title
-    article_name="$articles/$new_article_num $title"
+    path_to_article="$articles/$new_article_num $title"
+    echo "## $title" >  "$path_to_article"
+    echo             >> "$path_to_article"
   
-  # edit article
-    vim "$article_name"
-    [ ! -e "$article_name" ] && fail "aborted"
+  # edit article - jump to second line in insert mode
+    vim +2 -c 'startinsert' "$path_to_article"
+    [ ! -e "$path_to_article" ] && fail "aborted"
   # add signature
     (
       echo
       sig=`cat $article_signature`
       echo "$sig, `date +%F`"
-    ) >> "$article_name"
-  eval "$variable_to_assign_name_to='$article_name'"
+    ) >> "$path_to_article"
+  eval "$variable_to_assign_article_path_to='$path_to_article'"
 }
 
+# article_to_xxml path_to_article
+#
 article_to_xxml() {
-  article_name="$1"
-  number=`number_from_filename "$article_name"`
-  title=`title_from_filename   "$article_name"`
-  article_html="$articles_html/$number $title.html"
-  article_atom="$articles_atom/$number $title.xml"
+  path_to_article="$1"
+  article_name=$( basename "$path_to_article" )
+  path_to_html_article="$articles_html/$article_name.html"
+  path_to_atom_article="$articles_atom/$article_name.xml"
 
-  create_html_version_of_article "$article_name" > "$article_html"
-  create_atom_version_of_html    "$article_html" > "$article_atom"
+  create_html_version_of_article "$path_to_article"      > "$path_to_html_article"
+  create_atom_version_of_html    "$path_to_html_article" > "$path_to_atom_article"
 }
 
 build_blocks() {
@@ -294,8 +312,8 @@ build_blocks() {
 }
 
 rebuild() {
-  for article in "$articles"/*; do
-    article_to_xxml "$article"
+  for path_to_article in "$articles"/*; do
+    article_to_xxml "$path_to_article"
   done
   build_blocks
 }
@@ -338,7 +356,7 @@ main() {
     article)
       case "$1" in
         new)
-          new_article article_name ;;
+          new_article path_to_article ;;
         to)
           case "$2" in
             html)
@@ -365,8 +383,8 @@ main() {
           rebuild
           ;;
         "")
-          new_article article_name
-          article_to_xxml "$article_name"
+          new_article path_to_article
+          article_to_xxml "$path_to_article"
           build_publish_preview
           ;;
         *)
