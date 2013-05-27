@@ -96,9 +96,9 @@ title_from_article() {
   head -n 1 "$1"| sed 's/^## //'
 }
 
-# build something that can be used as a html anchor and
-# inside a url
-anchor_from_title() {
+# build something that can be used as a file name, html anchor
+# and a url
+article_name_from_title() {
   echo "$1" \
   | iconv -f UTF-8 -t ASCII//TRANSLIT//IGNORE \
   | tr '[:upper:]' '[:lower:]' \
@@ -128,6 +128,11 @@ anchor_from_html_version_of_article() {
   head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
 }
 
+article_name_from_path() {
+  article_name=`basename "$1" | cut -d' ' -f2-`
+  echo "$article_name"
+}
+
 # create_html_version_of_article path_to_article
 #
 create_html_version_of_article() {
@@ -136,7 +141,7 @@ create_html_version_of_article() {
       path_to_article=$1
 
       title=`title_from_article "$path_to_article"`
-      anchor=`anchor_from_title "$title"`
+      anchor=`article_name_from_path "$path_to_article"`
       # attention: the following line needs to match
       # in (title|anchor)_from_html_version_of_article
       echo "<a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>"
@@ -278,7 +283,8 @@ new_article() {
     new_article_num=$(( $last_article_num + 1 ))
     echo -n "Title of new article: "
     read title
-    path_to_article="$articles/$new_article_num $title"
+    article_name=`article_name_from_title "$title"`
+    path_to_article="$articles/$new_article_num $article_name"
     echo "## $title" >  "$path_to_article"
     echo             >> "$path_to_article"
   
