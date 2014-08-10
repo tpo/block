@@ -200,9 +200,9 @@ create_atom_version_of_html() {
 }
 
 last_article() {
-  _last_article=`ls "$articles"|sort|tail -n 1`
+  _last_article=`ls "$articles"|sort -n|tail -n 1`
   if [ "$_last_article" == "" ]; then
-    echo "00 Phantom initial article"
+    echo "000 Phantom initial article"
   else
     echo "$_last_article"
   fi
@@ -228,7 +228,7 @@ create_html_toc() {
   echo '      <div class="toc">'
                 cat "$block_html_toc_title"
   echo '        <ul>'
-                  ls $articles_html/* | sort | tac | while read article; do
+                  ls $articles_html/* | sort -n | tac | while read article; do
                     title=`title_from_html_version_of_article "$article"`
                     anchor=`anchor_from_html_version_of_article "$article"`
   echo "          <li><a href="#$anchor">$title</a></li>"
@@ -244,7 +244,7 @@ create_html_block() {
     echo '      <div class="content">'
                   cat $block_html_top
                   # include in reverse order: most recent first
-                  ls $articles_html/* | sort | tac | while read article; do
+                  ls $articles_html/* | sort -n | tac | while read article; do
 	            # indent text
                     cat "$article" | sed 's/^/        /'
                   done
