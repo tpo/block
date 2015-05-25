@@ -245,8 +245,29 @@ create_html_block() {
                   cat $block_html_top
                   # include in reverse order: most recent first
                   ls $articles_html/* | sort -n | tac | while read article; do
-	            # indent text
-                    cat "$article" | sed 's/^/        /'
+                    # indent text
+                    cat "$article" | (
+                      we_re_inside_a_code_section=no
+		      # without IFS.. `read` will drop leading spaces
+                      while IFS="\n" read line; do
+                        if [[ $line =~ "<pre>" ]]; then
+                          # don't indent <pre> sections
+                          # evidently this is a cludge solution
+                          echo "$line"
+                          we_re_inside_a_pre_section=yes
+                        elif [[ $line =~ "</pre>" ]]; then
+                          echo "$line"
+                          we_re_inside_a_pre_section=no
+                        else
+                          if [ "$we_re_inside_a_pre_section" == "yes" ]; then
+                            echo "$line"
+                          else
+                            # indent
+                            echo "        $line"
+                          fi
+                        fi
+                      done
+                    )
                   done
     echo '      </div>'
            create_html_toc
