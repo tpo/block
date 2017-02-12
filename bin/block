@@ -282,7 +282,9 @@ create_atom_block() {
     updated=$( date --rfc-3339=seconds | to_rfc3339 )
     echo "  <updated>$updated</updated>"
     echo
-    for article in $articles_atom/*; do
+    # sort newest article first
+    ls $articles_atom/* | sort -n -r \
+    | while IFS="\n" read article; do
       cat "$article"
     done
     cat $block_atom_footer
