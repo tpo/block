@@ -349,7 +349,11 @@ publish() {
   ask_for_confirmation -y "publish?" || exit
   (
     cd $block_output
-    rsync -avz --copy-unsafe-links `basename $block_html` `basename $block_atom` `basename $block_bits` $block_dst
+    rsync -avz --copy-unsafe-links \
+      `basename $block_html`       \
+      `basename $block_atom`       \
+      `basename $block_bits`       \
+      $block_dst
   )
 }
 
