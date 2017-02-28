@@ -10,3 +10,16 @@
     <link rel="stylesheet" href="bits/block.css" type="text/css">
   </head>
   <body>
+    <div class="wrap">
+      <div class="content">
+        <p class="block-title">
+          Joe Blogger's 'Block' blog
+        </p>
+
+$BODY
+
+      </div>
+      $( echo "$TOC" | sed 's/^/     /' )
+    </div>
+  </body>
+</html>

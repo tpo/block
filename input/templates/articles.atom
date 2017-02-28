@@ -5,3 +5,7 @@
   </author>
   <title>Joe Blogger's 'Block' blog</title>
   <id>http://www.example.org/</id>
+  <updated>$FEED_UPDATED</updated>
+
+$ARTICLES
+</feed>

@@ -3,7 +3,7 @@
 _block_ is an integrated script for blog creation. It offers:
 
 * writing articles in
-  [Markdown](http://daringfireball.net/projects/markdown/)
+  [Git Flavored Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown)
   in vim
 * generation of
   * html
@@ -18,12 +18,12 @@ most of its work. It depends on:
 
 * vim
 * rsync
-* Markup.pl
+* [marked](https://github.com/chjj/marked)
 * a browser
 
 ### installation (under Debian)
 
-    apt-get install rsync vim markdown
+    apt-get install rsync vim node-marked
     git clone https://github.com/tpo/block.git
     cd block
     mkdir ~/.block && cp config ~/.block/config
@@ -41,7 +41,7 @@ now you can write your first article:
                                     # to stdout.
     article to atom "article.html"  # Output html in atom form
                                     # to stdout.
-    block                           # Edit new article and generate
+    block                           # Edit new article and build
                                     # blog and preview.
     block home                      # Show block's home directory
                                     # use as: cd "`block home`".
@@ -65,7 +65,7 @@ now you can write your first article:
     block/input/articles            # your articles
     block/input/bits                # stuff (images etc.) that you can
                                     # refer to from youryour articles
-    block/input/parts               # parts from which the html pages
+    block/input/templates           # templates from which the html pages
                                     # and the atom feed will be
                                     # assembled. You'll want to edit
                                     # these.

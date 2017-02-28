@@ -20,275 +20,291 @@
 # (c) licensed under the GPLv2 license by Tomáš Pospíšek
 #
 
+#set -x
+
 usage() {
-  echo 'usage:'
-  echo '   article new                     - Write a new article'
-  echo '   article to html <article>       - Output article in html form'
-  echo '                                     to stdout.'
-  echo '   article to atom <article.html>  - Output html in atom form'
-  echo '                                     to stdout.'
-  echo '   block                           - Edit new article and generate'
-  echo '                                     blog and preview.'
-  echo "   block home                      - Show block's home directory"
-  echo '                                     use as: cd "`block home`".'
-  echo '   block publish                   - Publish blog.'
-  echo '   block rebuild                   - Rebuild blog from articles.'
-  echo
-  echo 'configuration:'
-  echo '   ~/.block/config                 - Configuration file. Needs to'
-  echo '                                     set the following variables:'
-  echo '   block_home=/home/joe/block      - Path to block directory'
-  echo '   block_dst=srv.example.org:website/'
-  echo '                                   - Rsync style destination, where'
-  echo '                                     the generated site will be'
-  echo '                                     rsynced to.'
-  echo '   block_url=http://www.example.org/'
-  echo '                                   - Site URL'
-  echo '                                     rsynced to.'
-  echo
-  echo 'directory layout:'
-  echo '   block/input/articles            - your articles'
-  echo '   block/input/bits                - stuff (images etc.) that you can'
-  echo '                                     refer to from youryour articles'
-  echo '   block/input/parts               - parts from which the html pages'
-  echo '                                     and the atom feed will be'
-  echo "                                     assembled. You'll want to edit"
-  echo '                                     these.'
-  echo
-  echo 'project home: https://github.com/tpo/block'
-  echo
-  exit 1
+    echo 'usage:'
+    echo '   article new                     - Write a new article'
+    echo '   article to html <article>       - Output article in html form'
+    echo '                                     to stdout.'
+    echo '   article to atom <article.html>  - Output html in atom form'
+    echo '                                     to stdout.'
+    echo '   block                           - Edit new article, build'
+    echo '                                     blog and preview.'
+    echo "   block home                      - Show block's home directory"
+    echo '                                     use as: cd "`block home`".'
+    echo '   block publish                   - Publish blog.'
+    echo '   block rebuild                   - Rebuild blog from articles.'
+    echo
+    echo 'configuration:'
+    echo '   ~/.block/config                 - Configuration file. Needs to'
+    echo '                                     set the following variables:'
+    echo '   block_home=/home/joe/block      - Path to block directory'
+    echo '   block_dst=srv.example.org:website/'
+    echo '                                   - Rsync style destination, where'
+    echo '                                     the built site will be'
+    echo '                                     rsynced to.'
+    echo '   block_url=http://www.example.org/'
+    echo '                                   - Site URL'
+    echo '                                     rsynced to.'
+    echo
+    echo 'directory layout:'
+    echo '   block/input/articles            - your articles'
+    echo '   block/input/bits                - stuff (images etc.) that you can'
+    echo '                                     refer to from youryour articles'
+    echo '   block/input/templates           - templates that are used to'
+    echo '                                     create the html pages and the'
+    echo "                                     atom feed. You'll want to edit"
+    echo '                                     these.'
+    echo
+    echo 'project home: https://github.com/tpo/block'
+    echo
+    exit 1
 }
 
 set -e # exit after error
 
 fail() {
-  echo "$1" >&2
-  exit -1
+    echo "$1" >&2
+    exit -1
 }
 
 configure_paths() {
-  # init block data paths
-  articles=$block_home/input/articles
-  block_parts=$block_home/input/parts
-  article_signature=$block_parts/signature.html
-  block_html_head=$block_parts/head.html
-  block_html_top=$block_parts/top.html
-  block_html_footer=$block_parts/footer.html
-  block_html_toc_title=$block_parts/toc-title.html
-  block_atom_header=$block_parts/head.xml
-  block_atom_footer=$block_parts/footer.xml
-  block_output=$block_home/output
-  articles_html=$block_output/html
-  articles_atom=$block_output/xml
-  # the following three must reside directly under $block_output
-  # see "rsync" below
-  block_html=$block_output/index.html
-  block_atom=$block_output/index.xml
-  block_bits=$block_output/bits
-  browser=${browser:-firefox}
+    # init block data paths
+    articles_src_dir=$block_home/input/articles
+    templates_dir=$block_home/input/templates
+    bits_dir=$block_home/input/bits
+    article_signature=$templates_dir/signature.html
+    output_dir=$block_home/output
+    articles_html=$output_dir/html
+    articles_atom=$output_dir/atom
+    # the following three must reside directly under $output_dir
+    # see "rsync" below
+    articles_all_html=$output_dir/index.html
+    articles_feed_atom=$output_dir/index.xml
+    block_bits=$output_dir/bits
+    browser=${browser:-firefox}
 }
 
 # title_from_article path_to_article
 # 
 title_from_article() {
-  # title is first line in file in markdown syntax: '## The Title'
-  head -n 1 "$1"| sed 's/^## //'
+    # title is first line in file in markdown syntax: '## The Title'
+    head -n 1 "$1"| sed 's/^## //'
 }
 
 # build something that can be used as a file name, html anchor
 # and a url
 article_name_from_title() {
-  echo "$1" \
-  | iconv -f UTF-8 -t ASCII//TRANSLIT//IGNORE \
-  | tr '[:upper:]' '[:lower:]' \
-  | tr '[:punct:]' '-' \
-  | sed 's/ \{1,\}/-/g;' \
-  | sed 's/-\{1,\}/-/g;'
-  # last two lines: replace multiple spaces, then multiple dashes
+    echo "$1" \
+    | iconv -f UTF-8 -t ASCII//TRANSLIT//IGNORE \
+    | tr '[:upper:]' '[:lower:]' \
+    | tr '[:punct:]' '-' \
+    | sed 's/ \{1,\}/-/g;' \
+    | sed 's/-\{1,\}/-/g;'
+    # last two lines: replace multiple spaces, then multiple dashes
 }
 
 url_from_anchor() {
-	echo "$block_url#$1"
+    echo "$block_url#$1"
 }
 
 # title_from_html_version_of_article path_to_html_article
 # 
 title_from_html_version_of_article() {
-  # title is first line in file in html syntax:
-  #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
-  head -n 1 "$1"| sed 's/^.*<h2>//; s/<\/h2>.*//'
+    # title is first line in file in html syntax:
+    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+    head -n 1 "$1"| sed 's/^.*<h2>//; s/<\/h2>.*//'
 }
 
 # anchor_from_html_version_of_article filename
 # 
 anchor_from_html_version_of_article() {
-  # title is first line in file in html syntax:
-  #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
-  head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
+    # title is first line in file in html syntax:
+    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+    head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
 }
 
 article_name_from_path() {
-  article_name=`basename "$1" | cut -d' ' -f2-`
-  echo "$article_name"
+    article_name=`basename "$1" | cut -d' ' -f2-`
+    echo "$article_name"
 }
 
-# create_html_version_of_article path_to_article
+cat_template() {
+    echo "cat << EOT"
+    cat "$templates_dir/$1"
+    echo EOT
+}
+
+# build_from_template template VAR_NAME1 VAR_NAME2 ...
 #
-create_html_version_of_article() {
-  (
-    (
-      path_to_article=$1
+build_from_template() {
+  cat_template2_sub() {
+      local template="$1"; shift
+      local var_content=
+      
+      for var_name in "$@"; do
+          # construct here something like this:
+          #
+          #     BODY=$(cat <<'EOVARIABLE'
+          #     here comes the
+          #     content of BODY
+          #     EOVARIABLE
+          #     )
+          #
+          echo "$var_name=\$(cat <<'EOVARIABLE'"
+          var_content="${!var_name}"
+          echo "$var_content"
+          echo "EOVARIABLE"
+          echo ")"
+      done
+      cat_template "$template"
+  }
 
-      title=`title_from_article "$path_to_article"`
-      anchor=`article_name_from_path "$path_to_article"`
-      # attention: the following line needs to match
-      # in (title|anchor)_from_html_version_of_article
-      echo "<a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>"
-      echo
-      # omit first line, since we've created the title ourselves
-      tail -n +2 "$path_to_article"
-    ) | markdown
+  cat_template2_sub "$@" | bash
+}
 
-    echo # newlines after each article
-    echo # to make html more readable
+prefix_with() {
+    sed "s/^/$1/"
+}
 
-  # process $includes
-    # http://www.unix.com.ua/orelly/perl/cookbook/ch07_10.htm
-  ) | perl -n -e \
-           'if( /\$sourcecode(\s*)"(\S*)"/ ) {
-              # replace HTML chars in sourcecode
-              print(`cat '$block_bits/'$2 | sed "s/&/\\&amp;/g ; s/</\\\\&lt;/g ; s/>/\\\\&gt;/g"`);
-              next; }
-            else {
-              print; }'
+# replace:
+#
+#      $sourcecode "foobar.sh"
+#
+# with the correctly indented contents of "foobar.sh"
+#
+process_sourcecode_includes() {
+    while IFS='' read -r line; do
+        if [[ "$line" =~ ^([[:space:]]*)\$sourcecode[[:space:]]+\"([[:alnum:]._-]+)\" ]]; then
+            cat "$bits_dir/${BASH_REMATCH[2]}" \
+            | prefix_with "${BASH_REMATCH[1]}"
+        else
+            echo "$line"
+        fi
+    done
+}
+
+# build_html_article path_to_article
+#
+build_html_article() {
+    local path_to_article="$1"
+    
+    # attention: the anchor line in the template needs
+    # to match in (title|anchor)_from_html_version_of_article
+    #
+    # `tail` omits first line, since we've created the title ourselves
+    #
+    TITLE=`title_from_article "$path_to_article"`
+    ANCHOR=`article_name_from_path "$path_to_article"`
+    BODY=`tail -n +2 "$path_to_article"`
+    build_from_template "article.html" TITLE ANCHOR BODY \
+        | process_sourcecode_includes \
+        | marked --gfm
 }
 
 # see http://feedvalidator.org/docs/error/InvalidRFC3339Date.html
 # fix broken format delivered by `date --rfc3339=seconds` ("date")
 #                         and by `stat --format %z`       ("stat")
-to_rfc3339(){
-  # 1. replace first space with a 'T'   (date and stat)
-  # 2. throw away fractions of a second (stat)
-  # 3. offset is missing a collon       (stat)
-  sed 's/ /T/;
-       s/\.[0-9]* //;
-       s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
+time_to_rfc3339(){
+    # 1. replace first space with a 'T'   (date and stat)
+    # 2. throw away fractions of a second (stat)
+    # 3. offset is missing a collon       (stat)
+    sed 's/ /T/;
+         s/\.[0-9]* //;
+         s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
 }
 
-# create_atom_version_of_html path_to_article.html
-create_atom_version_of_html() {
-
-  path_to_html_article="$1"
-  updated=$( stat --format %z "$path_to_html_article" | to_rfc3339 )
-
-  title=`title_from_html_version_of_article "$path_to_html_article"`
-  anchor=`anchor_from_html_version_of_article "$path_to_html_article"`
-  url=`url_from_anchor "$anchor"`
-
-  # see http://www.atompub.org/rfc4287.html
-
-  echo '<entry>'
-    echo "<title>$title</title>"
-    echo "<link href='$url'></link>"
-    echo "<id>$url</id>"
-    echo "<updated>$updated</updated>"
-    echo '<content type="html"><![CDATA['
-      cat "$path_to_html_article"
-    echo ']]></content>'
-  echo '</entry>'
+# build_atom_article path_to_article.html
+#
+# for atom format see http://www.atompub.org/rfc4287.html
+#
+build_atom_article() {
+    local path_to_html_article="$1"
+  
+    UPDATED=`stat --format %z "$path_to_html_article" | time_to_rfc3339`
+    TITLE=`title_from_html_version_of_article "$path_to_html_article"`
+    ANCHOR=`anchor_from_html_version_of_article "$path_to_html_article"`
+    CONTENT=`cat "$path_to_html_article"`
+    URL=`url_from_anchor "$ANCHOR"`
+    build_from_template "article.atom" UPDATED TITLE ANCHOR CONTENT URL
 }
 
 last_article() {
-  _last_article=`ls "$articles"|sort -n|tail -n 1`
-  if [ "$_last_article" == "" ]; then
-    echo "000 Phantom initial article"
-  else
-    echo "$_last_article"
-  fi
+    _last_article=`ls "$articles_src_dir"|sort -n|tail -n 1`
+    if [ "$_last_article" == "" ]; then
+        echo "000 Phantom initial article"
+    else
+        echo "$_last_article"
+    fi
 }
 
 is_number() {
-  [[ "$1" =~ ^[0-9]+$ ]]
-  return $?
+    [[ "$1" =~ ^[0-9]+$ ]]
+    return $?
 }
 
 # can exit if article name is broken
+#
 article_num() {
-  num=$( echo "$1" |awk '{ print $1 }' )
-  if is_number "$num"; then
-    echo "$num"
-  else
-    echo "$0: Line $LINENO: article \"$1\" does not have an article number" >&2
-    exit 1
-  fi
+    num=$( echo "$1" |awk '{ print $1 }' )
+    if is_number "$num"; then
+        echo "$num"
+    else
+        echo "$0: Line $LINENO: article \"$1\" does not have an article number" >&2
+        exit 1
+    fi
 }
 
-create_html_toc() {
-  echo '      <div class="toc">'
-                cat "$block_html_toc_title"
-  echo '        <ul>'
-                  ls $articles_html/* | sort -n | tac | while read article; do
-                    title=`title_from_html_version_of_article "$article"`
-                    anchor=`anchor_from_html_version_of_article "$article"`
-  echo "          <li><a href="#$anchor">$title</a></li>"
-                  done
-  echo '        </ul>'
-  echo '      </div>'
-}
-
-create_html_block() {
-  (
-    cat $block_html_head
-    echo '    <div class="wrap">'
-    echo '      <div class="content">'
-                  cat $block_html_top
-                  # include in reverse order: most recent first
-                  ls $articles_html/* | sort -n | tac | while read article; do
-                    # indent text
-                    cat "$article" | (
-                      we_re_inside_a_code_section=no
-		      # without IFS.. `read` will drop leading spaces
-                      while IFS="\n" read line; do
-                        if [[ $line =~ "<pre>" ]]; then
-                          # don't indent <pre> sections
-                          # evidently this is a cludge solution
-                          echo "$line"
-                          we_re_inside_a_pre_section=yes
-                        elif [[ $line =~ "</pre>" ]]; then
-                          echo "$line"
-                          we_re_inside_a_pre_section=no
-                        else
-                          if [ "$we_re_inside_a_pre_section" == "yes" ]; then
-                            echo "$line"
-                          else
-                            # indent
-                            echo "        $line"
-                          fi
-                        fi
-                      done
-                    )
-                  done
-    echo '      </div>'
-           create_html_toc
-    echo '    </div>'
-    cat $block_html_footer
-  ) > $block_html
-}
-
-create_atom_block() {
-  (
-    cat $block_atom_header
-    updated=$( date --rfc-3339=seconds | to_rfc3339 )
-    echo "  <updated>$updated</updated>"
-    echo
-    # sort newest article first
-    ls $articles_atom/* | sort -n -r \
-    | while IFS="\n" read article; do
-      cat "$article"
+# newest (largest number prefix) entry first
+#
+#   with_entries_in_dir directory command_to_execute
+#
+with_entries_in_dir() {
+    local directory="$1"; shift
+    find "$directory" -type f | sort -n -r | while read -r entry; do
+        "$@" "$entry"
     done
-    cat $block_atom_footer
-  ) > $block_atom
+}
+  
+# with newest (largest number prefix) article first
+#
+with_html_articles() {
+    with_entries_in_dir "$articles_html/" "$@"
+}
+
+# with newest (largest number prefix) atom article first
+#
+with_atom_articles() {
+    with_entries_in_dir "$articles_atom/" "$@"
+}
+
+cat_toc_entry() {
+    local article="$1"
+    TITLE=`title_from_html_version_of_article "$article"`
+    ANCHOR=`anchor_from_html_version_of_article "$article"`
+    build_from_template "toc_entry.html" TITLE ANCHOR
+}
+
+cat_html_toc() {
+    TOC=`with_html_articles cat_toc_entry`
+    build_from_template "toc.html" TOC
+}
+
+cat_articles_html() {
+    with_html_articles cat
+}
+
+cat_articles_all_html() {
+    TOC=`cat_html_toc`
+    BODY=`cat_articles_html`
+    build_from_template "articles_all.html" TOC BODY
+}
+
+cat_articles_feed_atom() {
+    FEED_UPDATED=`date --rfc-3339=seconds | time_to_rfc3339`
+    ARTICLES=`with_atom_articles cat`
+    build_from_template "articles.atom" FEED_UPDATED ARTICLES
 }
 
 # new_article variable_to_assign_article_path_to
@@ -298,137 +314,137 @@ create_atom_block() {
 # assigned to
 #
 new_article() {
-  variable_to_assign_article_path_to="$1"
+    variable_to_assign_article_path_to="$1"
 
-  # set article data
-    # determine number the new article
-    last_article_num=$( article_num "`last_article`" )
-    new_article_num=$(( $last_article_num + 1 ))
-    echo -n "Title of new article: "
-    read title
-    article_name=`article_name_from_title "$title"`
-    path_to_article="$articles/$new_article_num $article_name"
-    echo "## $title" >  "$path_to_article"
-    echo             >> "$path_to_article"
-  
-  # edit article - jump to second line in insert mode
-    vim +2 -c 'startinsert' "$path_to_article"
-    [ ! -e "$path_to_article" ] && fail "aborted"
-  # add signature
-    (
-      echo
-      sig=`cat $article_signature`
-      echo "$sig, `date +%F`"
-    ) >> "$path_to_article"
-  eval "$variable_to_assign_article_path_to='$path_to_article'"
+    # set article data
+        # determine number the new article
+        last_article_num=$( article_num "`last_article`" )
+        new_article_num=$(( $last_article_num + 1 ))
+        echo -n "Title of new article: "
+        read title
+        article_name=`article_name_from_title "$title"`
+        path_to_article="$articles_src_dir/$new_article_num $article_name"
+        echo "## $title" >  "$path_to_article"
+        echo             >> "$path_to_article"
+    
+    # edit article - jump to second line in insert mode
+        vim +2 -c 'startinsert' "$path_to_article"
+        [ ! -e "$path_to_article" ] && fail "aborted"
+    # add signature
+        (
+            echo
+            sig=`cat $article_signature`
+            echo "$sig, `date +%F`"
+        ) >> "$path_to_article"
+    eval "$variable_to_assign_article_path_to='$path_to_article'"
 }
 
-# article_to_xxml path_to_article
+# build_article_flavors path_to_article
 #
-article_to_xxml() {
-  path_to_article="$1"
-  article_name=$( basename "$path_to_article" )
-  path_to_html_article="$articles_html/$article_name.html"
-  path_to_atom_article="$articles_atom/$article_name.xml"
-
-  create_html_version_of_article "$path_to_article"      > "$path_to_html_article"
-  create_atom_version_of_html    "$path_to_html_article" > "$path_to_atom_article"
+build_article_flavors() {
+    path_to_article="$1"
+    article_name=`basename "$path_to_article"`
+    path_to_html_article="$articles_html/$article_name.html"
+    path_to_atom_article="$articles_atom/$article_name.atom"
+  
+    build_html_article "$path_to_article"      > "$path_to_html_article"
+    build_atom_article "$path_to_html_article" > "$path_to_atom_article"
 }
 
 build_blocks() {
-  create_html_block
-  create_atom_block
+    cat_articles_all_html  > $articles_all_html
+    cat_articles_feed_atom > $articles_feed_atom
 }
 
 rebuild() {
-  for path_to_article in "$articles"/*; do
-    article_to_xxml "$path_to_article"
-  done
-  build_blocks
+    for path_to_article in "$articles_src_dir"/*; do
+        build_article_flavors "$path_to_article"
+    done
+    build_blocks
 }
 
 publish() {
-  ask_for_confirmation -y "publish?" || exit
-  (
-    cd $block_output
-    rsync -avz --copy-unsafe-links \
-      `basename $block_html`       \
-      `basename $block_atom`       \
-      `basename $block_bits`       \
-      $block_dst
-  )
+    ask_for_confirmation -y "publish?" || exit
+    (
+        cd $output_dir
+        rsync -avz --copy-unsafe-links        \
+            "$(basename $articles_all_html)"  \
+            "$(basename $articles_feed_atom)" \
+            "$(basename $block_bits)"         \
+            $block_dst
+    )
 }
 
 build_publish_preview() {
-  build_blocks
-  publish  
-  $browser "$block_url"
+    build_blocks
+    publish  
+    $browser "$block_url"
 }
 
 missing_fail() {
-  fail "You need to set $1 in the configuration file"
+    fail "You need to set $1 in the configuration file"
 }
 
 load_config() {
-  source ~/.block/config || fail "Couldn't find config file ~/.block/config"
-  [ -n "$block_home" ]   || missing_fail "block_home"
-  [ -n "$block_dst" ]    || missing_fail "block_dst"
-  [ -n "$block_url" ]    || missing_fail "block_url"
+    source ~/.block/config || fail "Couldn't find config file ~/.block/config"
+    [ -n "$block_home" ]   || missing_fail "block_home"
+    [ -n "$block_dst" ]    || missing_fail "block_dst"
+    [ -n "$block_url" ]    || missing_fail "block_url"
 }
 
 # this script is callable under different names and will
 # then do different things
 #
 main() {
-  load_config
-  configure_paths
-
-  cmd_path=`realpath "$0"`
-  cmd_dir=`dirname $cmd_path`
-  case `basename "$cmd_path"` in
-    article)
-      case "$1" in
-        new)
-          new_article path_to_article ;;
-        to)
-          case "$2" in
-            html)
-              create_html_version_of_article "$2" ;;
-            atom)
-              create_atom_version_of_html "$2" ;;
-            *)
-              usage ;;
+    load_config
+    configure_paths
+  
+    cmd_path=`realpath "$0"`
+    cmd_dir=`dirname $cmd_path`
+    case `basename "$cmd_path"` in
+        article)
+            case "$1" in
+                new)
+                    new_article path_to_article ;;
+                to)
+                    case "$2" in
+                        html)
+                            build_html_article "$2" ;;
+                        atom)
+                            build_atom_article "$2" ;;
+                        *)
+                            usage ;;
+                    esac
+                    ;;
+                *)
+                  usage ;;
+            esac
+            ;;
+      block)
+          case "$1" in
+              home)
+                  echo $block_home
+                  ;;
+              publish)
+                  publish
+                  ;;
+              rebuild)
+                  rebuild
+                  ;;
+              "")
+                  new_article path_to_article
+                  build_article_flavors "$path_to_article"
+                  build_publish_preview
+                  ;;
+              *)
+                  usage
+                  ;;
           esac
           ;;
-        *)
-          usage ;;
-      esac
-      ;;
-    block)
-      case "$1" in
-        home)
-          echo $block_home
-	  ;;
-        publish)
-          publish
-          ;;
-        rebuild)
-          rebuild
-          ;;
-        "")
-          new_article path_to_article
-          article_to_xxml "$path_to_article"
-          build_publish_preview
-          ;;
-        *)
+      *)
           usage
           ;;
-      esac
-      ;;
-    *)
-      usage
-      ;;
-  esac
+    esac
 }
 
 main "$@" # call main
