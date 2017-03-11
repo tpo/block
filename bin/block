@@ -21,6 +21,7 @@
 #
 
 #set -x
+VERBOSE=false
 
 usage() {
     echo 'usage:'
@@ -34,7 +35,7 @@ usage() {
     echo "   block home                      - Show block's home directory"
     echo '                                     use as: cd "`block home`".'
     echo '   block publish                   - Publish blog.'
-    echo '   block rebuild                   - Rebuild blog from articles.'
+    echo '   block update [--verbose]        - Update blog from articles.'
     echo
     echo 'configuration:'
     echo '   ~/.block/config                 - Configuration file. Needs to'
@@ -63,6 +64,10 @@ usage() {
 }
 
 set -e # exit after error
+
+log() {
+    echo "$1" >&2
+}
 
 fail() {
     echo "$1" >&2
@@ -93,7 +98,7 @@ title_from_article() {
     head -n 1 "$1"| sed 's/^## //'
 }
 
-# build something that can be used as a file name, html anchor
+# generate something that can be used as a file name, html anchor
 # and a url
 article_name_from_title() {
     echo "$1" \
@@ -339,34 +344,75 @@ new_article() {
     eval "$variable_to_assign_article_path_to='$path_to_article'"
 }
 
-# build_article_flavors path_to_article
+# update_if_necessary command input_file output_file
 #
-build_article_flavors() {
+# will do:
+#
+#   command input_file > output_file
+#
+# if output_file doesn't exist or is older than input_file
+#
+# returns true if updated
+#
+update_if_necessary() {
+    if [ "$2" -nt "$3" ]; then
+        log "rebuilding $3"
+        "$1" "$2" > "$3"
+        true
+    else
+        # log "skipped $3"
+        false
+    fi
+}
+
+# update_article_flavors path_to_article
+#
+# only update article_flabours if original changed
+#
+# returns true if updated
+#
+update_article_flavors() {
     path_to_article="$1"
     article_name=`basename "$path_to_article"`
     path_to_html_article="$articles_html/$article_name.html"
     path_to_atom_article="$articles_atom/$article_name.atom"
-  
-    build_html_article "$path_to_article"      > "$path_to_html_article"
-    build_atom_article "$path_to_html_article" > "$path_to_atom_article"
+
+    updated=false
+    update_if_necessary \
+        build_html_article "$path_to_article"      "$path_to_html_article" \
+        && updated=true
+    update_if_necessary \
+        build_atom_article "$path_to_html_article" "$path_to_atom_article" \
+        && updated=true
+
+    [ "$updated" == "true" ]
 }
 
 build_blocks() {
-    cat_articles_all_html  > $articles_all_html
-    cat_articles_feed_atom > $articles_feed_atom
+    log "rebuilding $articles_all_html"
+    cat_articles_all_html  > "$articles_all_html"
+
+    log "rebuilt $articles_feed_atom"
+    cat_articles_feed_atom > "$articles_feed_atom"
 }
 
-rebuild() {
+update() {
+    updated=false
     for path_to_article in "$articles_src_dir"/*; do
-        build_article_flavors "$path_to_article"
+        update_article_flavors "$path_to_article" && updated=true
     done
-    build_blocks
+    if   [ "$updated" == "true"     ] ||
+       ! [ -e "$articles_all_html"  ] ||
+       ! [ -e "$articles_feed_atom" ]; then
+        build_blocks
+    fi
 }
 
 publish() {
     ask_for_confirmation -y "publish?" || exit
     (
         cd $output_dir
+        # TODO: basename required? quote variables?
         rsync -avz --copy-unsafe-links        \
             "$(basename $articles_all_html)"  \
             "$(basename $articles_feed_atom)" \
@@ -428,12 +474,13 @@ main() {
               publish)
                   publish
                   ;;
-              rebuild)
-                  rebuild
+              update)
+                  [ "$2" == "--verbose" ] && VERBOSE=true
+                  update
                   ;;
               "")
                   new_article path_to_article
-                  build_article_flavors "$path_to_article"
+                  update_article_flavors "$path_to_article"
                   build_publish_preview
                   ;;
               *)
