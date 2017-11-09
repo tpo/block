@@ -1,10 +1,16 @@
 #!/bin/bash
 #
-# using the very nice "Markup.pl" from
-# http://daringfireball.net/projects/markdown/syntax
+# DESCRIPTION
 #
-# You need to configure block in ~/.block/config.
-# An example ~/.block/config looks like this:
+# `block` is a `Markdown` blogging tool
+#
+# `block` needs to be configured in `~/.block/config,`
+# before you start using it. Like this:
+#
+#
+# CONFIGURATION
+#
+#   $ cat ~/.block/config
 #
 #   # Where does my block data live?
 #   block_home=~/doc/block
@@ -15,27 +21,38 @@
 #   # What's the URL of the resulting blog?
 #   block_url=http://www.example.org/my_blog
 #
-# TODO: make it validate with http://validator.w3.org/
+# DEPENDENCIES
+#
+# * #`block` uses uses node-marked
+#
+# SEE ALSO
+#
+# marked(1),markdown(1)
+#
+# THANKS
+#
+# * to Christopher Jeffrey for node-marked
+# * John Gruber for Markdown
+#
+# TODO
+#
+# make `block` validate with http://validator.w3.org/
+#
+# COPYRIGHT
 #
 # (c) licensed under the GPLv2 license by Tomáš Pospíšek
 #
 
 #set -x
-VERBOSE=false
 
 usage() {
     echo 'usage:'
-    echo '   article new                     - Write a new article'
-    echo '   article to html <article>       - Output article in html form'
-    echo '                                     to stdout.'
-    echo '   article to atom <article.html>  - Output html in atom form'
-    echo '                                     to stdout.'
     echo '   block                           - Edit new article, build'
     echo '                                     blog and preview.'
     echo "   block home                      - Show block's home directory"
     echo '                                     use as: cd "`block home`".'
     echo '   block publish                   - Publish blog.'
-    echo '   block update [--verbose]        - Update blog from articles.'
+    echo '   block update                    - Update blog from articles.'
     echo
     echo 'configuration:'
     echo '   ~/.block/config                 - Configuration file. Needs to'
@@ -58,208 +75,14 @@ usage() {
     echo "                                     atom feed. You'll want to edit"
     echo '                                     these.'
     echo
+    echo 'see also `article --help`'
+    echo
     echo 'project home: https://github.com/tpo/block'
     echo
     exit 1
 }
 
 set -e # exit after error
-
-log() {
-    echo "$1" >&2
-}
-
-fail() {
-    echo "$1" >&2
-    exit -1
-}
-
-configure_paths() {
-    # init block data paths
-    articles_src_dir=$block_home/input/articles
-    templates_dir=$block_home/input/templates
-    bits_dir=$block_home/input/bits
-    article_signature=$templates_dir/signature.html
-    output_dir=$block_home/output
-    articles_html=$output_dir/html
-    articles_atom=$output_dir/atom
-    # the following three must reside directly under $output_dir
-    # see "rsync" below
-    articles_all_html=$output_dir/index.html
-    articles_feed_atom=$output_dir/index.xml
-    block_bits=$output_dir/bits
-    browser=${browser:-firefox}
-}
-
-# title_from_article path_to_article
-# 
-title_from_article() {
-    # title is first line in file in markdown syntax: '## The Title'
-    head -n 1 "$1"| sed 's/^## //'
-}
-
-# generate something that can be used as a file name, html anchor
-# and a url
-article_name_from_title() {
-    echo "$1" \
-    | iconv -f UTF-8 -t ASCII//TRANSLIT//IGNORE \
-    | tr '[:upper:]' '[:lower:]' \
-    | tr '[:punct:]' '-' \
-    | sed 's/ \{1,\}/-/g;' \
-    | sed 's/-\{1,\}/-/g;'
-    # last two lines: replace multiple spaces, then multiple dashes
-}
-
-url_from_anchor() {
-    echo "$block_url#$1"
-}
-
-# title_from_html_version_of_article path_to_html_article
-# 
-title_from_html_version_of_article() {
-    # title is first line in file in html syntax:
-    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
-    head -n 1 "$1"| sed 's/^.*<h2>//; s/<\/h2>.*//'
-}
-
-# anchor_from_html_version_of_article filename
-# 
-anchor_from_html_version_of_article() {
-    # title is first line in file in html syntax:
-    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
-    head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
-}
-
-article_name_from_path() {
-    article_name=`basename "$1" | cut -d' ' -f2-`
-    echo "$article_name"
-}
-
-cat_template() {
-    echo "cat << EOT"
-    cat "$templates_dir/$1"
-    echo EOT
-}
-
-# build_from_template template VAR_NAME1 VAR_NAME2 ...
-#
-build_from_template() {
-  cat_template2_sub() {
-      local template="$1"; shift
-      local var_content=
-      
-      for var_name in "$@"; do
-          # construct here something like this:
-          #
-          #     BODY=$(cat <<'EOVARIABLE'
-          #     here comes the
-          #     content of BODY
-          #     EOVARIABLE
-          #     )
-          #
-          echo "$var_name=\$(cat <<'EOVARIABLE'"
-          var_content="${!var_name}"
-          echo "$var_content"
-          echo "EOVARIABLE"
-          echo ")"
-      done
-      cat_template "$template"
-  }
-
-  cat_template2_sub "$@" | bash
-}
-
-prefix_with() {
-    sed "s/^/$1/"
-}
-
-# replace:
-#
-#      $sourcecode "foobar.sh"
-#
-# with the correctly indented contents of "foobar.sh"
-#
-process_sourcecode_includes() {
-    while IFS='' read -r line; do
-        if [[ "$line" =~ ^([[:space:]]*)\$sourcecode[[:space:]]+\"([[:alnum:]._-]+)\" ]]; then
-            cat "$bits_dir/${BASH_REMATCH[2]}" \
-            | prefix_with "${BASH_REMATCH[1]}"
-        else
-            echo "$line"
-        fi
-    done
-}
-
-# see http://feedvalidator.org/docs/error/InvalidRFC3339Date.html
-# fix broken format delivered by `date --rfc3339=seconds` ("date")
-#                         and by `stat --format %z`       ("stat")
-time_to_rfc3339(){
-    # 1. replace first space with a 'T'   (date and stat)
-    # 2. throw away fractions of a second (stat)
-    # 3. offset is missing a collon       (stat)
-    sed 's/ /T/;
-         s/\.[0-9]* //;
-         s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
-}
-
-# build_html_article path_to_article
-#
-build_html_article() {
-    local path_to_article="$1"
-    
-    # attention: the anchor line in the template needs
-    # to match in (title|anchor)_from_html_version_of_article
-    #
-    # `tail` omits first line, since we've created the title ourselves
-    #
-    TITLE=`title_from_article "$path_to_article"`
-    ANCHOR=`article_name_from_path "$path_to_article"`
-    BODY=`tail -n +2 "$path_to_article"`
-    build_from_template "article.html" TITLE ANCHOR BODY \
-        | process_sourcecode_includes \
-        | marked --gfm
-}
-
-# build_atom_article path_to_article.html
-#
-# for atom format see http://www.atompub.org/rfc4287.html
-#
-build_atom_article() {
-    local path_to_html_article="$1"
-  
-    UPDATED=`stat --format %z "$path_to_html_article" | time_to_rfc3339`
-    TITLE=`title_from_html_version_of_article "$path_to_html_article"`
-    ANCHOR=`anchor_from_html_version_of_article "$path_to_html_article"`
-    CONTENT=`cat "$path_to_html_article"`
-    URL=`url_from_anchor "$ANCHOR"`
-    build_from_template "article.atom" UPDATED TITLE ANCHOR CONTENT URL
-}
-
-last_article() {
-    _last_article=`ls "$articles_src_dir"|sort -n|tail -n 1`
-    if [ "$_last_article" == "" ]; then
-        echo "000 Phantom initial article"
-    else
-        echo "$_last_article"
-    fi
-}
-
-is_number() {
-    [[ "$1" =~ ^[0-9]+$ ]]
-    return $?
-}
-
-# can exit if article name is broken
-#
-article_num() {
-    num=$( echo "$1" |awk '{ print $1 }' )
-    if is_number "$num"; then
-        echo "$num"
-    else
-        echo "$0: Line $LINENO: article \"$1\" does not have an article number" >&2
-        exit 1
-    fi
-}
 
 # newest (largest number prefix) entry first
 #
@@ -284,15 +107,15 @@ with_atom_articles() {
     with_entries_in_dir "$articles_atom/" "$@"
 }
 
-cat_toc_entry() {
+cat_html_toc_entry() {
     local article="$1"
-    TITLE=`title_from_html_version_of_article "$article"`
-    ANCHOR=`anchor_from_html_version_of_article "$article"`
+    TITLE=`article title_from_html "$article"`
+    ANCHOR=`article anchor_from_html "$article"`
     build_from_template "toc_entry.html" TITLE ANCHOR
 }
 
 cat_html_toc() {
-    TOC=`with_html_articles cat_toc_entry`
+    TOC=`with_html_articles cat_html_toc_entry`
     build_from_template "toc.html" TOC
 }
 
@@ -312,59 +135,6 @@ cat_articles_feed_atom() {
     build_from_template "articles.atom" FEED_UPDATED ARTICLES
 }
 
-# new_article variable_to_assign_article_path_to
-#
-# variable_to_assign_article_path_to is the name of
-# a variable to which the article path will be
-# assigned to
-#
-new_article() {
-    variable_to_assign_article_path_to="$1"
-
-    # set article data
-        # determine number the new article
-        last_article_num=$( article_num "`last_article`" )
-        new_article_num=$(( $last_article_num + 1 ))
-        echo -n "Title of new article: "
-        read title
-        article_name=`article_name_from_title "$title"`
-        path_to_article="$articles_src_dir/$new_article_num $article_name"
-        echo "## $title" >  "$path_to_article"
-        echo             >> "$path_to_article"
-    
-    # edit article - jump to second line in insert mode
-        vim +2 -c 'startinsert' "$path_to_article"
-        [ ! -e "$path_to_article" ] && fail "aborted"
-    # add signature
-        (
-            echo
-            sig=`cat $article_signature`
-            echo "$sig, `date +%F`"
-        ) >> "$path_to_article"
-    eval "$variable_to_assign_article_path_to='$path_to_article'"
-}
-
-# update_if_necessary command input_file output_file
-#
-# will do:
-#
-#   command input_file > output_file
-#
-# if output_file doesn't exist or is older than input_file
-#
-# returns true if updated
-#
-update_if_necessary() {
-    if [ "$2" -nt "$3" ]; then
-        log "rebuilding $3"
-        "$1" "$2" > "$3"
-        true
-    else
-        # log "skipped $3"
-        false
-    fi
-}
-
 # update_article_flavors path_to_article
 #
 # only update article_flabours if original changed
@@ -379,10 +149,10 @@ update_article_flavors() {
 
     updated=false
     update_if_necessary \
-        build_html_article "$path_to_article"      "$path_to_html_article" \
+        article build_html "$path_to_article"      > "$path_to_html_article" \
         && updated=true
     update_if_necessary \
-        build_atom_article "$path_to_html_article" "$path_to_atom_article" \
+        article build_atom "$path_to_html_article" > "$path_to_atom_article" \
         && updated=true
 
     [ "$updated" == "true" ]
@@ -399,7 +169,7 @@ build_blocks() {
 update() {
     updated=false
     for path_to_article in "$articles_src_dir"/*; do
-        update_article_flavors "$path_to_article" && updated=true
+        article update_flavors "$path_to_article" && updated=true
     done
     if   [ "$updated" == "true"     ] ||
        ! [ -e "$articles_all_html"  ] ||
@@ -431,11 +201,16 @@ missing_fail() {
     fail "You need to set $1 in the configuration file"
 }
 
+# differently named from the identical `article`function to
+# evade naming conflict
+#
 load_config() {
-    source ~/.block/config || fail "Couldn't find config file ~/.block/config"
-    [ -n "$block_home" ]   || missing_fail "block_home"
-    [ -n "$block_dst" ]    || missing_fail "block_dst"
-    [ -n "$block_url" ]    || missing_fail "block_url"
+    source ~/.block/config || (
+        echo "Couldn't find config file ~/.block/config" >&2
+        exit -1
+    )
+    source "$block_home/bin/lib/common.sh"
+    check_config_or_fail
 }
 
 # this script is callable under different names and will
@@ -445,52 +220,27 @@ main() {
     load_config
     configure_paths
   
-    cmd_path=`realpath "$0"`
-    cmd_dir=`dirname $cmd_path`
-    case `basename "$cmd_path"` in
-        article)
-            case "$1" in
-                new)
-                    new_article path_to_article ;;
-                to)
-                    case "$2" in
-                        html)
-                            build_html_article "$2" ;;
-                        atom)
-                            build_atom_article "$2" ;;
-                        *)
-                            usage ;;
-                    esac
-                    ;;
-                *)
-                  usage ;;
-            esac
+    # TODO: del?
+    # cmd_path=`realpath "$0"`
+    # cmd_dir=`dirname $cmd_path`
+    case "$1" in
+        home)
+            echo $block_home
             ;;
-      block)
-          case "$1" in
-              home)
-                  echo $block_home
-                  ;;
-              publish)
-                  publish
-                  ;;
-              update)
-                  [ "$2" == "--verbose" ] && VERBOSE=true
-                  update
-                  ;;
-              "")
-                  new_article path_to_article
-                  update_article_flavors "$path_to_article"
-                  build_publish_preview
-                  ;;
-              *)
-                  usage
-                  ;;
-          esac
-          ;;
-      *)
-          usage
-          ;;
+        publish)
+            publish
+            ;;
+        update)
+            update
+            ;;
+        "")
+            path_to_article=$( article new )
+            update_article_flavors "$path_to_article"
+            build_publish_preview
+            ;;
+        *)
+            usage
+            ;;
     esac
 }
 

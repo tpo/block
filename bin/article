@@ -1,1 +1,278 @@
-block
+#!/bin/bash
+#
+# see `block --help`
+#
+# (c) licensed under the GPLv2 license by Tomáš Pospíšek
+#
+
+#set -x
+
+usage_a() {
+    echo 'usage:'
+    echo
+    echo '   article new                     - Write a new article'
+    echo '   article to html <article>       - Output article in html form'
+    echo '                                     to stdout.'
+    echo '   article to atom <article.html>  - Output html in atom form'
+    echo
+    echo 'internal usage                     - see functions of same'
+    echo '                                     name in the code'
+    echo '   article title_from_markdown path/to/html/article'
+    echo '   article title_from_html     path/to/markdown/article'
+    echo '   article update_flavours     path/to/markdown/article'
+    echo
+    echo 'see also `block --help`'
+    echo
+    exit 1
+}
+
+set -e # exit after error
+
+# differently named from the identical `block` function to
+# evade naming conflict
+#
+load_config_() {
+    . ~/.block/config || (
+        echo "Couldn't find config file ~/.block/config" >&2
+        exit -1
+    )
+    . "$block_home/bin/lib/common.sh"
+    check_config_or_fail
+}
+
+# title_from_markdown path_to_article
+# 
+title_from_markdown() {
+    # title is first line in file in markdown syntax: '## The Title'
+    head -n 1 "$1"| sed 's/^## //'
+}
+
+# generate something that can be used as a file name, html anchor
+# and a url
+name_from_title() {
+    echo "$1" \
+    | iconv -f UTF-8 -t ASCII//TRANSLIT//IGNORE \
+    | tr '[:upper:]' '[:lower:]' \
+    | tr '[:punct:]' '-' \
+    | sed 's/ \{1,\}/-/g;' \
+    | sed 's/-\{1,\}/-/g;'
+    # last two lines: replace multiple spaces, then multiple dashes
+}
+
+url_from_anchor() {
+    echo "$block_url#$1"
+}
+
+# title_from_html path_to_html_article
+# 
+title_from_html() {
+    # title is first line in file in html syntax:
+    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+    head -n 1 "$1"| sed 's/^.*<h2>//; s/<\/h2>.*//'
+}
+
+# anchor_from_html filename
+# 
+anchor_from_html() {
+    # title is first line in file in html syntax:
+    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+    head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
+}
+
+name_from_path() {
+    article_name=`basename "$1" | cut -d' ' -f2-`
+    echo "$article_name"
+}
+
+prefix_with() {
+    sed "s/^/$1/"
+}
+
+# replace:
+#
+#      $sourcecode "foobar.sh"
+#
+# with the correctly indented contents of "foobar.sh"
+#
+process_sourcecode_includes() {
+    while IFS='' read -r line; do
+        if [[ "$line" =~ ^([[:space:]]*)\$sourcecode[[:space:]]+\"([[:alnum:]._-]+)\" ]]; then
+            cat "$bits_dir/${BASH_REMATCH[2]}" \
+            | prefix_with "${BASH_REMATCH[1]}"
+        else
+            echo "$line"
+        fi
+    done
+}
+
+# build_html path_to_article
+#
+build_html() {
+    local path_to_article="$1"
+    
+    # attention: the anchor line in the template needs
+    # to match in (title|anchor)_from_html_version_of_article
+    #
+    # `tail` omits first line, since we've created the title ourselves
+    #
+    TITLE=`title_from_markdown "$path_to_article"`
+    ANCHOR=`name_from_path "$path_to_article"`
+    BODY=`tail -n +2 "$path_to_article"`
+    build_from_template "article.html" TITLE ANCHOR BODY \
+        | process_sourcecode_includes \
+        | marked --gfm
+}
+
+# build_atom path_to_article.html
+#
+# for atom format see http://www.atompub.org/rfc4287.html
+#
+build_atom() {
+    local path_to_html_article="$1"
+  
+    UPDATED=`stat --format %z "$path_to_html_article" | time_to_rfc3339`
+    TITLE=`title_from_html "$path_to_html_article"`
+    ANCHOR=`anchor_from_html "$path_to_html_article"`
+    CONTENT=`cat "$path_to_html_article"`
+    URL=`url_from_anchor "$ANCHOR"`
+    build_from_template "article.atom" UPDATED TITLE ANCHOR CONTENT URL
+}
+
+last_article() {
+    _last_article=`ls "$articles_src_dir"|sort -n|tail -n 1`
+    if [ "$_last_article" == "" ]; then
+        echo "000 Phantom initial article"
+    else
+        echo "$_last_article"
+    fi
+}
+
+is_number() {
+    [[ "$1" =~ ^[0-9]+$ ]]
+    return $?
+}
+
+# returns the number of the article
+#
+# can exit if article name is broken
+#
+number_of() {
+    num=$( echo "$1" |awk '{ print $1 }' )
+    if is_number "$num"; then
+        echo "$num"
+    else
+        echo "$0: Line $LINENO: article \"$1\" does not have an article number" >&2
+        exit 1
+    fi
+}
+
+# create new article
+#
+new() {
+    # set article data
+        # determine number the new article
+        last_article_num=$( number_of "`last_article`" )
+        new_article_num=$(( $last_article_num + 1 ))
+        echo -n "Title of new article: "
+        read title
+        article_name=`name_from_title "$title"`
+        path_to_article="$articles_src_dir/$new_article_num $article_name"
+        echo "## $title" >  "$path_to_article"
+        echo             >> "$path_to_article"
+    
+    # edit article - jump to second line in insert mode
+        vim +2 -c 'startinsert' "$path_to_article"
+        [ ! -e "$path_to_article" ] && fail "aborted"
+    # add signature
+        (
+            echo
+            sig=`cat $article_signature`
+            echo "$sig, `date +%F`"
+        ) >> "$path_to_article"
+    echo "$path_to_article"
+}
+
+# update_if_necessary command input_file output_file
+#
+# will do:
+#
+#   command input_file > output_file
+#
+# if output_file doesn't exist or is older than input_file
+#
+# returns true if updated
+#
+update_if_necessary() {
+    if [ "$2" -nt "$3" ]; then
+        log "rebuilding $3"
+        "$1" "$2" > "$3"
+        true
+    else
+        # log "skipped $3"
+        false
+    fi
+}
+
+# update_flavors path_to_article
+#
+# only update article flavors if original changed
+#
+# returns true if updated
+#
+update_flavors() {
+    path_to_article="$1"
+    article_name=`basename "$path_to_article"`
+    path_to_html_article="$articles_html/$article_name.html"
+    path_to_atom_article="$articles_atom/$article_name.atom"
+
+    updated=false
+    update_if_necessary \
+        build_html "$path_to_article"      "$path_to_html_article" \
+        && updated=true
+    update_if_necessary \
+        build_atom "$path_to_html_article" "$path_to_atom_article" \
+        && updated=true
+
+    [ "$updated" == "true" ]
+}
+
+missing_fail() {
+    fail "You need to set $1 in the configuration file"
+}
+
+# this script is callable under different names and will
+# then do different things
+#
+main() {
+    load_config_
+    configure_paths
+  
+    case "$1" in
+        new)
+            new path_to_article ;;
+        to)
+            case "$2" in
+                html)
+                    build_html "$3" ;;
+                atom)
+                    build_atom "$3" ;;
+                *)
+                    usage_a ;;
+            esac
+            ;;
+        title_from_markdown)
+            title_from_markdown "$2";;
+        title_from_html)
+            title_from_html     "$2";;
+        anchor_from_html)
+            anchor_from_html    "$2";;
+        update_flavors)
+            update_flavors     "$2";;
+        *)
+          usage_a ;;
+    esac
+}
+
+main "$@" # call main
+
+# vim: expandtab
