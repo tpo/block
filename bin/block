@@ -234,7 +234,12 @@ main() {
             update
             ;;
         "")
-            path_to_article=$( article new )
+            article new
+            # we assume that out article is the last one that was created
+            # create the path from $articles_src_dir/ and the name of the
+            # last file
+            path_to_article=$( echo -n "$articles_src_dir/" ;
+                               ls  -tr "$articles_src_dir" | tail -n 1 )
             update_article_flavors "$path_to_article"
             build_publish_preview
             ;;

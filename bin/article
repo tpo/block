@@ -19,7 +19,7 @@ usage_a() {
     echo '                                     name in the code'
     echo '   article title_from_markdown path/to/html/article'
     echo '   article title_from_html     path/to/markdown/article'
-    echo '   article update_flavours     path/to/markdown/article'
+    echo '   article update_flavors      path/to/markdown/article'
     echo
     echo 'see also `block --help`'
     echo
@@ -189,28 +189,6 @@ new() {
             sig=`cat $article_signature`
             echo "$sig, `date +%F`"
         ) >> "$path_to_article"
-    echo "$path_to_article"
-}
-
-# update_if_necessary command input_file output_file
-#
-# will do:
-#
-#   command input_file > output_file
-#
-# if output_file doesn't exist or is older than input_file
-#
-# returns true if updated
-#
-update_if_necessary() {
-    if [ "$2" -nt "$3" ]; then
-        log "rebuilding $3"
-        "$1" "$2" > "$3"
-        true
-    else
-        # log "skipped $3"
-        false
-    fi
 }
 
 # update_flavors path_to_article
@@ -267,7 +245,7 @@ main() {
         anchor_from_html)
             anchor_from_html    "$2";;
         update_flavors)
-            update_flavors     "$2";;
+            update_flavors      "$2";;
         *)
           usage_a ;;
     esac

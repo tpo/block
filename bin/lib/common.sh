@@ -86,3 +86,25 @@ time_to_rfc3339(){
          s/\.[0-9]* //;
          s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
 }
+
+# update_if_necessary command input_file output_file
+#
+# will do:
+#
+#   command input_file > output_file
+#
+# if output_file doesn't exist or is older than input_file
+#
+# returns true if updated
+#
+update_if_necessary() {
+    if [ "$2" -nt "$3" ]; then
+        log "rebuilding $3"
+        "$1" "$2" > "$3"
+        true
+    else
+        # log "skipped $3"
+        false
+    fi
+}
+
