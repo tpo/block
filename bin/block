@@ -1,33 +1,35 @@
 #!/bin/bash
-#
-# DESCRIPTION
-#
-# `block` is a `Markdown` blogging tool
-#
-# `block` needs to be configured in `~/.block/config,`
-# before you start using it. Like this:
-#
-# DEPENDENCIES
-#
-# * #`block` uses uses node-marked
-#
-# SEE ALSO
-#
-# marked(1),markdown(1)
-#
-# THANKS
-#
-# * to Christopher Jeffrey for node-marked
-# * John Gruber for Markdown
-#
-# TODO
-#
-# make `block` validate with http://validator.w3.org/
-#
-# COPYRIGHT
-#
-# (c) licensed under the GPLv2 license by Tomáš Pospíšek
-#
+about() {
+    echo 'DESCRIPTION'
+    echo
+    echo '`block` is a `Markdown` blogging tool'
+    echo
+    echo '`block` needs to be configured in `~/.block/config,`'
+    echo 'before you start using it. Like this:'
+    echo
+    echo 'DEPENDENCIES'
+    echo
+    echo '* #`block` uses uses node-marked'
+    echo
+    echo 'SEE ALSO'
+    echo
+    echo 'marked(1),markdown(1)'
+    echo
+    echo 'THANKS'
+    echo
+    echo '* to Christopher Jeffrey for node-marked'
+    echo '* John Gruber for Markdown'
+    echo
+    echo 'TODO'
+    echo
+    echo 'make `block` validate with http://validator.w3.org/'
+    echo
+    echo 'COPYRIGHT'
+    echo
+    echo '(c) licensed under the GPLv2 license by Tomáš Pospíšek'
+    echo
+    exit 0
+}
 
 #set -x
 
@@ -215,6 +217,9 @@ main() {
     # cmd_path=`realpath "$0"`
     # cmd_dir=`dirname $cmd_path`
     case "$1" in
+        about)
+            about()
+            ;;
         home)
             echo $block_home
             ;;
