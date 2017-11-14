@@ -213,9 +213,6 @@ main() {
     load_config
     configure_paths
   
-    # TODO: del?
-    # cmd_path=`realpath "$0"`
-    # cmd_dir=`dirname $cmd_path`
     case "$1" in
         about)
             about
