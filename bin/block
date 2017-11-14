@@ -46,34 +46,36 @@
 #set -x
 
 usage() {
-    echo 'usage:'
-    echo '   block                           - Edit new article, build'
-    echo '                                     blog and preview.'
-    echo "   block home                      - Show block's home directory"
-    echo '                                     use as: cd "`block home`".'
-    echo '   block publish                   - Publish blog.'
-    echo '   block update                    - Update blog from articles.'
+#         ^.........................................................................$
+    echo 'Usage:'
     echo
-    echo 'configuration:'
-    echo '   ~/.block/config                 - Configuration file. Needs to'
-    echo '                                     set the following variables:'
-    echo '   block_home=/home/joe/block      - Path to block directory'
-    echo '   block_dst=srv.example.org:website/'
-    echo '                                   - Rsync style destination, where'
-    echo '                                     the built site will be'
-    echo '                                     rsynced to.'
-    echo '   block_url=http://www.example.org/'
-    echo '                                   - Site URL'
-    echo '                                     rsynced to.'
+    echo '   block                              - Edit new article, build'
+    echo '                                        blog and preview.'
+    echo "   block home                         - Show block's home directory"
+    echo '                                        use as: cd "`block home`".'
+    echo '   block publish                      - Publish blog.'
+    echo '   block update                       - Update blog from articles.'
     echo
-    echo 'directory layout:'
-    echo '   block/input/articles            - your articles'
-    echo '   block/input/bits                - stuff (images etc.) that you can'
-    echo '                                     refer to from youryour articles'
-    echo '   block/input/templates           - templates that are used to'
-    echo '                                     create the html pages and the'
-    echo "                                     atom feed. You'll want to edit"
-    echo '                                     these.'
+    echo 'Configuration:'
+    echo
+    echo '   ~/.block/config                    - Configuration file. Needs to'
+    echo '                                        set the following variables:'
+    echo '   block_home=/home/joe/block         - Path to block directory'
+    echo '   block_dst=srv.example.org:website/ - Rsync style destination, where'
+    echo '                                        the built site will be'
+    echo '                                        rsynced to.'
+    echo '   block_url=http://www.example.org/  - URL under which this blog is'
+    echo '                                        published.'
+    echo
+    echo 'Directory layout:'
+    echo
+    echo '   block/input/articles               - Your articles'
+    echo '   block/input/bits                   - Stuff (images etc.) that you can'
+    echo '                                        refer to from youryour articles'
+    echo '   block/input/templates              - Templates that are used to'
+    echo '                                        create the html pages and the'
+    echo "                                        atom feed. You'll want to edit"
+    echo '                                        these.'
     echo
     echo 'see also `article --help`'
     echo
