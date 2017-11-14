@@ -7,20 +7,6 @@
 # `block` needs to be configured in `~/.block/config,`
 # before you start using it. Like this:
 #
-#
-# CONFIGURATION
-#
-#   $ cat ~/.block/config
-#
-#   # Where does my block data live?
-#   block_home=~/doc/block
-#
-#   # Where should I rsync the produced html and atom feed to?
-#   block_dst=www.example.org:html/
-#
-#   # What's the URL of the resulting blog?
-#   block_url=http://www.example.org/my_blog
-#
 # DEPENDENCIES
 #
 # * #`block` uses uses node-marked
@@ -51,7 +37,9 @@ usage() {
     echo
     echo '   block                              - Edit new article, build'
     echo '                                        blog and preview.'
-    echo "   block home                         - Show block's home directory"
+    echo '   block --help                       - Display usage help.'
+    echo '   block about                        - Display infos about block.'
+    echo "   block home                         - Display block's home directory"
     echo '                                        use as: cd "`block home`".'
     echo '   block publish                      - Publish blog.'
     echo '   block update                       - Update blog from articles.'
@@ -60,12 +48,13 @@ usage() {
     echo
     echo '   ~/.block/config                    - Configuration file. Needs to'
     echo '                                        set the following variables:'
-    echo '   block_home=/home/joe/block         - Path to block directory'
-    echo '   block_dst=srv.example.org:website/ - Rsync style destination, where'
+    echo '   block_home=/home/joe/block         - Where does my block data live?'
+    echo '   block_dst=srv.example.org:website/ - Where should I rsync the'
+    echo '                                        produced html and atom feed to?'
     echo '                                        the built site will be'
     echo '                                        rsynced to.'
-    echo '   block_url=http://www.example.org/  - URL under which this blog is'
-    echo '                                        published.'
+    echo "   block_url=http://www.example.org/  - What's the URL of the resulting"
+    echo '                                        blog?'
     echo
     echo 'Directory layout:'
     echo
