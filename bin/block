@@ -218,7 +218,7 @@ main() {
     # cmd_dir=`dirname $cmd_path`
     case "$1" in
         about)
-            about()
+            about
             ;;
         home)
             echo $block_home
