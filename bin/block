@@ -13,7 +13,7 @@ about() {
     echo
     echo 'SEE ALSO'
     echo
-    echo 'marked(1),markdown(1)'
+    echo 'marked(1),markdown(1),`block --help`'
     echo
     echo 'THANKS'
     echo
