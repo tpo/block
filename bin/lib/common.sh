@@ -34,7 +34,7 @@ configure_paths() {
     articles_atom=$output_dir/atom
     # the following three must reside directly under $output_dir
     # see "rsync" below
-    articles_all_html=$output_dir/index.html
+    articles_one_page_html=$output_dir/one_page.html
     articles_feed_atom=$output_dir/index.xml
     block_bits=$output_dir/bits
     browser=${browser:-firefox}

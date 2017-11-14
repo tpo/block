@@ -116,10 +116,10 @@ cat_articles_html() {
     with_html_articles cat
 }
 
-cat_articles_all_html() {
+cat_articles_one_page_html() {
     TOC=`cat_html_toc`
     BODY=`cat_articles_html`
-    build_from_template "articles_all.html" TOC BODY
+    build_from_template "articles_one_page.html" TOC BODY
 }
 
 cat_articles_feed_atom() {
@@ -152,11 +152,11 @@ update_article_flavors() {
 }
 
 build_blocks() {
-    log "rebuilding $articles_all_html"
-    cat_articles_all_html  > "$articles_all_html"
+    log "rebuilding $articles_one_page_html"
+    cat_articles_one_page_html > "$articles_one_page_html"
 
     log "rebuilt $articles_feed_atom"
-    cat_articles_feed_atom > "$articles_feed_atom"
+    cat_articles_feed_atom     > "$articles_feed_atom"
 }
 
 update() {
@@ -164,8 +164,8 @@ update() {
     for path_to_article in "$articles_src_dir"/*; do
         article update_flavors "$path_to_article" && updated=true
     done
-    if   [ "$updated" == "true"     ] ||
-       ! [ -e "$articles_all_html"  ] ||
+    if   [ "$updated" == "true"          ] ||
+       ! [ -e "$articles_one_page_html"  ] ||
        ! [ -e "$articles_feed_atom" ]; then
         build_blocks
     fi
@@ -176,10 +176,10 @@ publish() {
     (
         cd $output_dir
         # TODO: basename required? quote variables?
-        rsync -avz --copy-unsafe-links        \
-            "$(basename $articles_all_html)"  \
-            "$(basename $articles_feed_atom)" \
-            "$(basename $block_bits)"         \
+        rsync -avz --copy-unsafe-links             \
+            "$(basename $articles_one_page_html)"  \
+            "$(basename $articles_feed_atom)"      \
+            "$(basename $block_bits)"              \
             $block_dst
     )
 }
