@@ -7,7 +7,7 @@
 
 #set -x
 
-usage_a() {
+usage() {
     echo 'usage:'
     echo
     echo '   article new                     - Write a new article'
@@ -17,8 +17,11 @@ usage_a() {
     echo
     echo 'internal usage                     - see functions of same'
     echo '                                     name in the code'
-    echo '   article title_from_markdown path/to/html/article'
-    echo '   article title_from_html     path/to/markdown/article'
+    echo
+    echo '   article title_from_markdown path/to/markdown/article'
+    echo '   article title_from_html     path/to/html/article'
+    echo '   article anchor_from_path    path/to/html/article'
+    echo '   article rel_url_from_path   path/to/html/article'
     echo '   article update_flavors      path/to/markdown/article'
     echo
     echo 'see also `block --help`'
@@ -59,29 +62,51 @@ name_from_title() {
     # last two lines: replace multiple spaces, then multiple dashes
 }
 
-url_from_anchor() {
-    echo "$block_url#$1"
-}
-
 # title_from_html path_to_html_article
 # 
 title_from_html() {
     # title is first line in file in html syntax:
-    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
+    # [...]<h2>$title</h2>[...]
     head -n 1 "$1"| sed 's/^.*<h2>//; s/<\/h2>.*//'
 }
 
-# anchor_from_html filename
+# article_name_article_path
 # 
-anchor_from_html() {
-    # title is first line in file in html syntax:
-    #   <a name='$anchor'></a><a href='#$anchor'><h2>$title</h2></a>
-    head -n 1 "$1"| sed "s/^.*<a name='//; s/'>.*//"
+article_name_from_path() {
+    case "$1" in
+      *.md)   ext=.md   ;;
+      *.atom) ext=.atom ;;
+      *.html) ext=.html ;;
+      *) echo "article '$1' has extension" >&2; exit 1 ;;
+    esac
+    basename -s "$ext" "$1"
 }
 
-name_from_path() {
-    article_name=`basename "$1" | cut -d' ' -f2-`
-    echo "$article_name"
+anchor_from_path() {
+    article_name_from_path "$1"
+}
+
+# this needs to be kept compatible, and not
+# change, since this is a UUID
+#
+atom_id_from_path() {
+    name_without_number=$( article_name_from_path "$1" | sed 's/... //' )
+    echo "${block_url}#${name_without_number}"
+}
+
+anchor_url_from_path() {
+    echo -n "#"
+    anchor_from_path "$1"
+}
+
+rel_url_from_path() {
+    url=$( article_name_from_path "$1" )
+    echo "/articles/${url}.html"
+}
+
+abs_url_from_path() {
+    url=$( article_name_from_path "$1" )
+    echo "${block_url}articles/${url}.html"
 }
 
 prefix_with() {
@@ -105,9 +130,9 @@ process_sourcecode_includes() {
     done
 }
 
-# build_html path_to_article
+# build_raw_html path_to_article
 #
-build_html() {
+build_raw_html() {
     local path_to_article="$1"
     
     # attention: the anchor line in the template needs
@@ -116,11 +141,46 @@ build_html() {
     # `tail` omits first line, since we've created the title ourselves
     #
     TITLE=`title_from_markdown "$path_to_article"`
-    ANCHOR=`name_from_path "$path_to_article"`
+    ANCHOR=`anchor_from_path "$path_to_article"`
+    URL=`rel_url_from_path "$path_to_article"`
     BODY=`tail -n +2 "$path_to_article"`
-    build_from_template "article.html" TITLE ANCHOR BODY \
+    build_from_template "article_raw.html" TITLE ANCHOR URL BODY \
         | process_sourcecode_includes \
         | marked --gfm
+}
+
+# build_html path_to_article.html
+#
+build_html() {
+    local path_to_html_article="$1"
+    TITLE=`title_from_html "$path_to_html_article"`
+    BODY=`cat "$path_to_html_article"`
+    older_article=`older_article "$path_to_html_article"`
+    if [ "$older_article" == "" ]; then
+      older_navigation=""
+    else
+      OLDER_ARTICLE_URL=$( rel_url_from_path "$older_article" )
+      OLDER_ARTICLE_TITLE=`title_from_html "$older_article"`
+      nav_older=$(
+          build_from_template "navigation_older_article.html" \
+                              OLDER_ARTICLE_URL OLDER_ARTICLE_TITLE
+      )
+    fi
+    younger_article=`younger_article "$path_to_html_article"`
+    if [ "$younger_article" == "" ]; then
+      younger_navigation=""
+    else
+      YOUNGER_ARTICLE_URL=$( rel_url_from_path "$younger_article" )
+      YOUNGER_ARTICLE_TITLE=`title_from_html "$younger_article"`
+      nav_younger=$(
+          build_from_template "navigation_younger_article.html" \
+                              YOUNGER_ARTICLE_URL YOUNGER_ARTICLE_TITLE
+      )
+    fi
+    NAVIGATION="${nav_older} - ${nav_younger}"
+    BODY=$( build_from_template "article.html" BODY NAVIGATION )
+    TOC=$( cat_html_toc )
+    build_html_page "article.html" TITLE BODY TOC
 }
 
 # build_atom path_to_article.html
@@ -132,10 +192,10 @@ build_atom() {
   
     UPDATED=`stat --format %z "$path_to_html_article" | time_to_rfc3339`
     TITLE=`title_from_html "$path_to_html_article"`
-    ANCHOR=`anchor_from_html "$path_to_html_article"`
+    ID=`atom_id_from_path "$path_to_html_article"`
+    URL=`abs_url_from_path "$path_to_html_article"`
     CONTENT=`cat "$path_to_html_article"`
-    URL=`url_from_anchor "$ANCHOR"`
-    build_from_template "article.atom" UPDATED TITLE ANCHOR CONTENT URL
+    build_from_template "article.atom" UPDATED TITLE CONTENT URL ID
 }
 
 last_article() {
@@ -147,17 +207,90 @@ last_article() {
     fi
 }
 
+# find_article_with_num directory number
+#
+find_article_with_num() {
+    find "$1" -regex ".*/$2 .*"
+}
+
+# younger_article path_to_article.html
+#
+younger_article() {
+    article="$1"
+    number=$( number_of "$article" )
+    last_number=$( number_of $( last_article ) )
+    if [ "$number" == "$last_number" ]; then
+        # oldest article - there is no older one
+        true
+    else
+        dir=$( dirname "$article" )
+        younger_num=$( inc_article_num $number )
+        find_article_with_num "$dir" $younger_num
+    fi
+}
+
+# older_article path_to_article.html
+#
+older_article() {
+    article="$1"
+    number=$( number_of "$article" )
+    if [ "$number" == "001" ]; then
+        # first article - there is no younger one
+        true
+    else
+        dir=$( dirname "$article" )
+        older_num=$( dec_article_num $number )
+        find_article_with_num "$dir" $older_num
+    fi
+}
+
+# format_article_number simple_positive_integer
+#
+format_article_number() {
+    printf "%03d" "$1"
+}
+
+# int_from_article_num 001
+# -> 1
+#
+int_from_article_num() {
+    cleaned=$( echo "$1" | sed 's/^0*//' )
+    if [ "$cleaned" == "" ]; then
+        echo "0"
+    else
+        echo "$cleaned"
+    fi
+}
+
+# inc_article_num 33
+# -> 034
+# inc_article_num 033
+# -> 034
+# inc_article_num 133
+# -> 134
+#
+inc_article_num() {
+    cleaned=$( int_from_article_num "$1" )
+    format_article_number $(( $cleaned + 1 ))
+}
+dec_article_num() {
+    cleaned=$( int_from_article_num "$1" )
+    format_article_number $(( $cleaned - 1 ))
+}
+
 is_number() {
     [[ "$1" =~ ^[0-9]+$ ]]
     return $?
 }
 
+# number_of path_to_article
+#
 # returns the number of the article
 #
 # can exit if article name is broken
 #
 number_of() {
-    num=$( echo "$1" |awk '{ print $1 }' )
+    num=$( basename "$1" |awk '{ print $1 }' )
     if is_number "$num"; then
         echo "$num"
     else
@@ -172,11 +305,11 @@ new() {
     # set article data
         # determine number the new article
         last_article_num=$( number_of "`last_article`" )
-        new_article_num=$(( $last_article_num + 1 ))
+        new_article_num=$( inc_article_num $last_article_num )
         echo -n "Title of new article: "
         read title
         article_name=`name_from_title "$title"`
-        path_to_article="$articles_src_dir/$new_article_num $article_name"
+        path_to_article="$articles_src_dir/$new_article_num $article_name.md"
         echo "## $title" >  "$path_to_article"
         echo             >> "$path_to_article"
     
@@ -199,16 +332,20 @@ new() {
 #
 update_flavors() {
     path_to_article="$1"
-    article_name=`basename "$path_to_article"`
+    article_name=`basename -s .md "$path_to_article"`
+    path_to_raw_html_article="$articles_raw_html/$article_name.html"
     path_to_html_article="$articles_html/$article_name.html"
     path_to_atom_article="$articles_atom/$article_name.atom"
 
     updated=false
     update_if_necessary \
-        build_html "$path_to_article"      "$path_to_html_article" \
+        build_raw_html "$path_to_article"      "$path_to_raw_html_article" \
         && updated=true
     update_if_necessary \
-        build_atom "$path_to_html_article" "$path_to_atom_article" \
+        build_html "$path_to_raw_html_article" "$path_to_html_article" "$toc_html" \
+        && updated=true
+    update_if_necessary \
+        build_atom "$path_to_raw_html_article" "$path_to_atom_article"     \
         && updated=true
 
     [ "$updated" == "true" ]
@@ -227,7 +364,7 @@ main() {
   
     case "$1" in
         new)
-            new path_to_article ;;
+            new ;;
         to)
             case "$2" in
                 html)
@@ -238,16 +375,12 @@ main() {
                     usage_a ;;
             esac
             ;;
-        title_from_markdown)
-            title_from_markdown "$2";;
-        title_from_html)
-            title_from_html     "$2";;
-        anchor_from_html)
-            anchor_from_html    "$2";;
-        update_flavors)
-            update_flavors      "$2";;
+        title_from_markdown|title_from_html|anchor_from_path)
+            $1 "$2" ;;
+        rel_url_from_path|update_flavors)
+            $1 "$2" ;;
         *)
-          usage_a ;;
+          usage ;;
     esac
 }
 

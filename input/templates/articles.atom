@@ -3,8 +3,8 @@
   <author>
     <name>Joe Blogger</name>
   </author>
-  <title>Joe Blogger's 'Block' blog</title>
-  <id>http://www.example.org/</id>
+  <title>$TITLE</title>
+  <id>$BLOCK_URL</id>
   <updated>$FEED_UPDATED</updated>
 
 $ARTICLES

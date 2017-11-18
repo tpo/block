@@ -30,12 +30,16 @@ configure_paths() {
     bits_dir=$block_home/input/bits
     article_signature=$templates_dir/signature.html
     output_dir=$block_home/output
-    articles_html=$output_dir/html
+    articles_raw_html=$output_dir/html
+    articles_html=$output_dir/articles
     articles_atom=$output_dir/atom
     # the following three must reside directly under $output_dir
     # see "rsync" below
     articles_one_page_html=$output_dir/one_page.html
+    articles_landing_page_html=$output_dir/index.html
     articles_feed_atom=$output_dir/index.xml
+    toc_articles_one_page_html=$output_dir/toc_one_page.html
+    toc_html=$output_dir/toc.html
     block_bits=$output_dir/bits
     browser=${browser:-firefox}
     PATH="$block_home/bin:$PATH"
@@ -47,6 +51,9 @@ cat_template() {
     echo EOT
 }
 
+cat_html_toc() {
+    cat "$toc_html"
+}
 # build_from_template template VAR_NAME1 VAR_NAME2 ...
 #
 build_from_template() {
@@ -75,6 +82,13 @@ build_from_template() {
   cat_template2_sub "$@" | bash
 }
 
+# build_from_template TITLE BODY TOC
+#
+build_html_page() {
+  BLOCK_URL="$block_url"
+  build_from_template "page.html" TITLE BODY TOC
+}
+
 # see http://feedvalidator.org/docs/error/InvalidRFC3339Date.html
 # fix broken format delivered by `date --rfc3339=seconds` ("date")
 #                         and by `stat --format %z`       ("stat")
@@ -87,18 +101,22 @@ time_to_rfc3339(){
          s/\([+-]\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1\2:\3/;'
 }
 
-# update_if_necessary command input_file output_file
+# update_if_necessary command input_file output_file additional_dependency
 #
 # will do:
 #
 #   command input_file > output_file
 #
-# if output_file doesn't exist or is older than input_file
+# if 'output_file':
+# * doesn't exist or
+# * is older than 'input_file' or
+# * is older than 'additional_dependency'
 #
 # returns true if updated
 #
 update_if_necessary() {
-    if [ "$2" -nt "$3" ]; then
+    if [ "$3" -ot "$2" -o \
+	 "$3" -ot "$4"    ]; then
         log "rebuilding $3"
         "$1" "$2" > "$3"
         true
@@ -107,4 +125,3 @@ update_if_necessary() {
         false
     fi
 }
-

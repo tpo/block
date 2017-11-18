@@ -44,12 +44,14 @@ usage() {
     echo "   block home                         - Display block's home directory"
     echo '                                        use as: cd "`block home`".'
     echo '   block publish                      - Publish blog.'
+    echo '   block view                         - View blog.'
     echo '   block update                       - Update blog from articles.'
     echo
     echo 'Configuration:'
     echo
     echo '   ~/.block/config                    - Configuration file. Needs to'
     echo '                                        set the following variables:'
+    echo "   block_name='Joe\\'s Block blog'    - Name of the blog"
     echo '   block_home=/home/joe/block         - Where does my block data live?'
     echo '   block_dst=srv.example.org:website/ - Where should I rsync the'
     echo '                                        produced html and atom feed to?'
@@ -91,7 +93,7 @@ with_entries_in_dir() {
 # with newest (largest number prefix) article first
 #
 with_html_articles() {
-    with_entries_in_dir "$articles_html/" "$@"
+    with_entries_in_dir "$articles_raw_html/" "$@"
 }
 
 # with newest (largest number prefix) atom article first
@@ -100,94 +102,162 @@ with_atom_articles() {
     with_entries_in_dir "$articles_atom/" "$@"
 }
 
+# init function for the cat_landing_page_articles function
+#
+init_cat_landing_page_articles() {
+    landing_page_articles_counter=0
+    LANDING_NEXT_ARTICLES=""
+}
+
+# this function needs to be initialized first with
+# init_cat_landing_page_articles before calling it
+#
+# we'll have two full articles and 2 article extracts
+# on the landing page
+#
+cat_landing_page_articles() {
+    if   [ "$landing_page_articles_counter" -lt 2 ]; then
+        # cat first two articles
+        cat "$1"
+    elif [ "$landing_page_articles_counter" -lt 4  ]; then
+        # accumulate articles formated as 'toc_entry'
+        LANDING_NEXT_ARTICLES=$(
+            echo "$LANDING_NEXT_ARTICLES"
+            cat_html_toc_entry "$1"
+        )
+    elif [ "$landing_page_articles_counter" -eq 4  ]; then
+        build_from_template "landing_page_articles_next.html" LANDING_NEXT_ARTICLES
+    fi
+    # ignore all other articles
+
+    landing_page_articles_counter=$(( $landing_page_articles_counter + 1 ))
+}
+
 cat_html_toc_entry() {
     local article="$1"
     TITLE=`article title_from_html "$article"`
-    ANCHOR=`article anchor_from_html "$article"`
-    build_from_template "toc_entry.html" TITLE ANCHOR
+    URL=`article rel_url_from_path "$article"`
+    build_from_template "toc_entry.html" TITLE URL
 }
 
-cat_html_toc() {
+cat_one_page_html_toc_entry() {
+    local article="$1"
+    TITLE=`article title_from_html "$article"`
+    URL=`article anchor_url_from_path "$article"`
+    build_from_template "toc_entry.html" TITLE URL
+}
+
+cat_one_page_html_toc() {
+    cat "$toc_articles_one_page_html"
+}
+
+generate_html_toc() {
     TOC=`with_html_articles cat_html_toc_entry`
-    build_from_template "toc.html" TOC
+    BLOCK_URL="$block_url"
+    build_from_template "toc.html" TOC BLOCK_URL > "$toc_html"
+}
+
+generate_one_page_html_toc() {
+    TOC=`with_html_articles cat_one_page_html_toc_entry`
+    BLOCK_URL="$block_url"
+    build_from_template "toc.html" TOC BLOCK_URL > "$toc_articles_one_page_html"
 }
 
 cat_articles_html() {
     with_html_articles cat
 }
 
+generate_landing_page_articles_html() {
+    init_cat_landing_page_articles
+    with_html_articles cat_landing_page_articles
+}
+
 cat_articles_one_page_html() {
-    TOC=`cat_html_toc`
+    TOC=`cat_one_page_html_toc`
     BODY=`cat_articles_html`
-    build_from_template "articles_one_page.html" TOC BODY
+    TITLE="$block_name - all articles"
+    build_html_page TITLE BODY TOC
+}
+
+cat_articles_landing_page_html() {
+    TOC=`cat_html_toc`
+    BODY=`generate_landing_page_articles_html`
+    TITLE="$block_name"
+    build_html_page TITLE BODY TOC
 }
 
 cat_articles_feed_atom() {
     FEED_UPDATED=`date --rfc-3339=seconds | time_to_rfc3339`
     ARTICLES=`with_atom_articles cat`
-    build_from_template "articles.atom" FEED_UPDATED ARTICLES
-}
-
-# update_article_flavors path_to_article
-#
-# only update article_flabours if original changed
-#
-# returns true if updated
-#
-update_article_flavors() {
-    path_to_article="$1"
-    article_name=`basename "$path_to_article"`
-    path_to_html_article="$articles_html/$article_name.html"
-    path_to_atom_article="$articles_atom/$article_name.atom"
-
-    updated=false
-    update_if_necessary \
-        article build_html "$path_to_article"      > "$path_to_html_article" \
-        && updated=true
-    update_if_necessary \
-        article build_atom "$path_to_html_article" > "$path_to_atom_article" \
-        && updated=true
-
-    [ "$updated" == "true" ]
+    TITLE="$block_name"
+    BLOCK_URL="$block_url"
+    build_from_template "articles.atom" FEED_UPDATED ARTICLES TITLE BLOCK_URL
 }
 
 build_blocks() {
     log "rebuilding $articles_one_page_html"
-    cat_articles_one_page_html > "$articles_one_page_html"
+    cat_articles_one_page_html     > "$articles_one_page_html"
 
-    log "rebuilt $articles_feed_atom"
-    cat_articles_feed_atom     > "$articles_feed_atom"
+    log "rebuilding $articles_landing_page_html"
+    cat_articles_landing_page_html > "$articles_landing_page_html"
+
+    log "rebuilding $articles_feed_atom"
+    cat_articles_feed_atom         > "$articles_feed_atom"
+}
+
+generate_tocs() {
+    generate_html_toc
+    generate_one_page_html_toc
 }
 
 update() {
     updated=false
-    for path_to_article in "$articles_src_dir"/*; do
-        article update_flavors "$path_to_article" && updated=true
-    done
+
+    update_articles() {
+        for path_to_article in "$articles_src_dir"/*; do
+            article update_flavors "$path_to_article" && updated=true
+        done
+    }
+
+    if [ ! -e "$toc_articles_one_page_html" -o \
+      ! -e "$toc_html"                         ]; then
+        generate_tocs
+    fi
+
+    update_articles
+
+    # if any article changed, then a title of and
+    # article might have changed, thus regenerate
+    # the toc and afterwards regenerate html
+    # articles (that contain a toc!)
+    if [ "$updated" == "true" ]; then
+        generate_tocs
+        update_articles
+    fi
+
     if   [ "$updated" == "true"          ] ||
        ! [ -e "$articles_one_page_html"  ] ||
+       ! [ -e "$articles_landing_html"   ] ||
        ! [ -e "$articles_feed_atom" ]; then
         build_blocks
     fi
 }
 
+# publish [no_prompt]
+#
 publish() {
-    ask_for_confirmation -y "publish?" || exit
+    [ "$1" != "no_prompt" ] && ( ask_for_confirmation -y "publish?" || exit )
     (
         cd $output_dir
         # TODO: basename required? quote variables?
-        rsync -avz --copy-unsafe-links             \
-            "$(basename $articles_one_page_html)"  \
-            "$(basename $articles_feed_atom)"      \
-            "$(basename $block_bits)"              \
+        rsync -avz --copy-unsafe-links                \
+            "$(basename $articles_one_page_html)"     \
+            "$(basename $articles_landing_page_html)" \
+            "$(basename $articles_feed_atom)"         \
+            "$(basename $block_bits)"                 \
+            "$(basename $articles_html)"              \
             $block_dst
     )
-}
-
-build_publish_preview() {
-    build_blocks
-    publish  
-    $browser "$block_url"
 }
 
 missing_fail() {
@@ -214,17 +284,17 @@ main() {
     configure_paths
   
     case "$1" in
-        about)
-            about
-            ;;
         home)
-            echo $block_home
-            ;;
+             echo $block_home
+             ;;
         publish)
-            publish
+             publish no_prompt
+             ;;
+        view)
+            $browser "$block_url"
             ;;
-        update)
-            update
+        update|about)
+            "$1"
             ;;
         "")
             article new
@@ -233,8 +303,9 @@ main() {
             # last file
             path_to_article=$( echo -n "$articles_src_dir/" ;
                                ls  -tr "$articles_src_dir" | tail -n 1 )
-            update_article_flavors "$path_to_article"
-            build_publish_preview
+            update
+            publish  
+            view
             ;;
         *)
             usage

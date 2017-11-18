@@ -1,7 +1,7 @@
 <entry>
 <title>$TITLE</title>
 <link href='$URL'></link>
-<id>$URL</id>
+<id>$ID</id>
 <updated>$UPDATED</updated>
 <content type="html"><![CDATA[
 $CONTENT
