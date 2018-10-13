@@ -20,6 +20,7 @@ most of its work. It depends on:
 * rsync
 * [marked](https://github.com/chjj/marked)
 * a browser
+* [SSI-AJAX](https://github.com/tpo/SSI-AJAX)
 
 ### installation (under Debian)
 

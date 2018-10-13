@@ -228,11 +228,9 @@ update() {
 
     # if any article changed, then a title of and
     # article might have changed, thus regenerate
-    # the toc and afterwards regenerate html
-    # articles (that contain a toc!)
+    # the toc
     if [ "$updated" == "true" ]; then
         generate_tocs
-        update_articles
     fi
 
     if   [ "$updated" == "true"          ] ||
@@ -256,6 +254,7 @@ publish() {
             "$(basename $articles_feed_atom)"         \
             "$(basename $block_bits)"                 \
             "$(basename $articles_html)"              \
+            "$(basename $toc_html)"                   \
             $block_dst
     )
 }

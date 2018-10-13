@@ -74,9 +74,10 @@ title_from_html() {
 # 
 article_name_from_path() {
     case "$1" in
-      *.md)   ext=.md   ;;
-      *.atom) ext=.atom ;;
-      *.html) ext=.html ;;
+      *.md)    ext=.md   ;;
+      *.atom)  ext=.atom ;;
+      *.html)  ext=.html ;;
+      *.shtml) ext=.shtml ;;
       *) echo "article '$1' has extension" >&2; exit 1 ;;
     esac
     basename -s "$ext" "$1"
@@ -101,12 +102,12 @@ anchor_url_from_path() {
 
 rel_url_from_path() {
     url=$( article_name_from_path "$1" )
-    echo "/articles/${url}.html"
+    echo "/articles/${url}.shtml"
 }
 
 abs_url_from_path() {
     url=$( article_name_from_path "$1" )
-    echo "${block_url}articles/${url}.html"
+    echo "${block_url}articles/${url}.shtml"
 }
 
 prefix_with() {
@@ -334,7 +335,7 @@ update_flavors() {
     path_to_article="$1"
     article_name=`basename -s .md "$path_to_article"`
     path_to_raw_html_article="$articles_raw_html/$article_name.html"
-    path_to_html_article="$articles_html/$article_name.html"
+    path_to_html_article="$articles_html/$article_name.shtml"
     path_to_atom_article="$articles_atom/$article_name.atom"
 
     updated=false

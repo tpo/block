@@ -52,8 +52,12 @@ cat_template() {
 }
 
 cat_html_toc() {
-    cat "$toc_html"
+    # TOC will be included server-side via
+    # https://github.com/tpo/SSI-AJAX
+    #
+    echo '<ssi-ajax>include virtual="toc.html"</ssi-ajax>'
 }
+
 # build_from_template template VAR_NAME1 VAR_NAME2 ...
 #
 build_from_template() {
