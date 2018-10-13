@@ -260,6 +260,10 @@ publish() {
     )
 }
 
+view() {
+    $browser "$block_url"
+}
+
 missing_fail() {
     fail "You need to set $1 in the configuration file"
 }
@@ -291,7 +295,7 @@ main() {
              publish no_prompt
              ;;
         view)
-            $browser "$block_url"
+            view
             ;;
         update|about)
             "$1"
