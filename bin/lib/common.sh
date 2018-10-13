@@ -36,7 +36,7 @@ configure_paths() {
     # the following three must reside directly under $output_dir
     # see "rsync" below
     articles_one_page_html=$output_dir/one_page.html
-    articles_landing_page_html=$output_dir/index.html
+    articles_landing_page_html=$output_dir/index.shtml
     articles_feed_atom=$output_dir/index.xml
     toc_articles_one_page_html=$output_dir/toc_one_page.html
     toc_html=$output_dir/toc.html
