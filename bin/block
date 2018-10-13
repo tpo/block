@@ -224,7 +224,7 @@ update() {
     }
 
     if [ ! -e "$toc_articles_one_page_html" -o \
-      ! -e "$toc_html"                         ]; then
+         ! -e "$toc_html"                         ]; then
         generate_tocs
     fi
 
