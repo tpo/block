@@ -173,6 +173,10 @@ generate_landing_page_articles_html() {
 }
 
 cat_articles_one_page_html() {
+    # the index that contains all articles at once
+    # has a different toc, that references entries
+    # in the full page and not individial articles
+    #
     TOC=`cat_one_page_html_toc`
     BODY=`cat_articles_html`
     TITLE="$block_name - all articles"
