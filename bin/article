@@ -181,7 +181,8 @@ build_html() {
     NAVIGATION="${nav_older} - ${nav_younger}"
     BODY=$( build_from_template "article.html" BODY NAVIGATION )
     TOC=$( cat_html_toc )
-    build_html_page "article.html" TITLE BODY TOC
+    BLOCK_NAME="$block_name"
+    build_html_page "article.html" TITLE BODY TOC BLOCK_NAME
 }
 
 # build_atom path_to_article.html

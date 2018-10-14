@@ -180,14 +180,16 @@ cat_articles_one_page_html() {
     TOC=`cat_one_page_html_toc`
     BODY=`cat_articles_html`
     TITLE="$block_name - all articles"
-    build_html_page TITLE BODY TOC
+    BLOCK_NAME="$TITLE"
+    build_html_page TITLE BODY TOC BLOCK_NAME
 }
 
 cat_articles_landing_page_html() {
     TOC=`cat_html_toc`
     BODY=`generate_landing_page_articles_html`
     TITLE="$block_name"
-    build_html_page TITLE BODY TOC
+    BLOCK_NAME="$TITLE"
+    build_html_page TITLE BODY TOC BLOCK_NAME
 }
 
 cat_articles_feed_atom() {

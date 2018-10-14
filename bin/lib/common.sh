@@ -86,11 +86,11 @@ build_from_template() {
   cat_template2_sub "$@" | bash
 }
 
-# build_from_template TITLE BODY TOC
+# build_from_template TITLE BODY TOC BLOCK_NAME
 #
 build_html_page() {
   BLOCK_URL="$block_url"
-  build_from_template "page.html" TITLE BODY TOC
+  build_from_template "page.html" TITLE BODY TOC BLOCK_NAME
 }
 
 # see http://feedvalidator.org/docs/error/InvalidRFC3339Date.html
