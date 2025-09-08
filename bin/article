@@ -18,12 +18,12 @@ usage() {
     echo 'internal usage                     - see functions of same'
     echo '                                     name in the code'
     echo
-    echo '   article title_from_markdown path/to/markdown/article'
-    echo '   article title_from_html     path/to/html/article'
-    echo '   article anchor_from_path    path/to/html/article'
+    echo '   article title_from_markdown  path/to/markdown/article'
+    echo '   article title_from_html      path/to/html/article'
+    echo '   article anchor_from_path     path/to/html/article'
     echo '   article anchor_url_from_path path/to/html/article'
-    echo '   article rel_url_from_path   path/to/html/article'
-    echo '   article update_flavors      path/to/markdown/article'
+    echo '   article rel_url_from_path    path/to/html/article'
+    echo '   article update_flavors       path/to/markdown/article'
     echo
     echo 'see also `block --help`'
     echo
