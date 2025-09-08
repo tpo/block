@@ -21,6 +21,7 @@ usage() {
     echo '   article title_from_markdown path/to/markdown/article'
     echo '   article title_from_html     path/to/html/article'
     echo '   article anchor_from_path    path/to/html/article'
+    echo '   article anchor_url_from_path path/to/html/article'
     echo '   article rel_url_from_path   path/to/html/article'
     echo '   article update_flavors      path/to/markdown/article'
     echo
@@ -377,7 +378,7 @@ main() {
                     usage_a ;;
             esac
             ;;
-        title_from_markdown|title_from_html|anchor_from_path)
+        title_from_markdown|title_from_html|anchor_from_path|anchor_url_from_path)
             $1 "$2" ;;
         rel_url_from_path|update_flavors)
             $1 "$2" ;;
